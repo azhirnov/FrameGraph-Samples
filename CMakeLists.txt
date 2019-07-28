@@ -4,7 +4,7 @@ cmake_minimum_required( VERSION 3.10 FATAL_ERROR )
 #==================================================================================================
 # project: Samples.Vulkan
 #==================================================================================================
-if (${FG_ENABLE_SAMPLES} AND ${FG_ENABLE_GLSLANG})
+if (${FG_ENABLE_GLSLANG})
 	set( SOURCES 
 		"vulkan/compiler/SpvCompiler.cpp"
 		"vulkan/compiler/SpvCompiler.h"
@@ -75,7 +75,7 @@ endif()
 #==================================================================================================
 # project: Samples.Shadertoy
 #==================================================================================================
-if (${FG_ENABLE_SAMPLES} AND ${FG_ENABLE_GLM})
+if (${FG_ENABLE_GLM})
 	set( SOURCES 
 		"shadertoy/my_shaders/Building_1.glsl"
 		"shadertoy/my_shaders/ConvexShape2D.glsl"
@@ -113,9 +113,7 @@ if (${FG_ENABLE_SAMPLES} AND ${FG_ENABLE_GLM})
 	source_group( "" FILES "shadertoy/FGShadertoyApp.cpp" "shadertoy/FGShadertoyApp.h" )
 	set_property( TARGET "Samples.Shadertoy" PROPERTY FOLDER "Samples" )
 	target_include_directories( "Samples.Shadertoy" PUBLIC "${FG_EXTERNALS_PATH}" )
-	if (${FG_ENABLE_GLM})
-		target_link_libraries( "Samples.Shadertoy" "Scene" )
-	endif()
+	target_link_libraries( "Samples.Shadertoy" "Scene" )
 	if (${FG_ENABLE_GLSLANG})
 		target_link_libraries( "Samples.Shadertoy" "PipelineCompiler" )
 	endif()
@@ -156,7 +154,7 @@ endif()
 #==================================================================================================
 # project: Samples.RayTracing
 #==================================================================================================
-if (${FG_ENABLE_SAMPLES} AND ${FG_ENABLE_ASSIMP} AND ${FG_ENABLE_GLM} AND ${FG_ENABLE_DEVIL})
+if (${FG_ENABLE_ASSIMP} AND ${FG_ENABLE_GLM} AND ${FG_ENABLE_DEVIL})
 	set( SOURCES 
 		"ray_tracing/SceneApp.cpp"
 		"ray_tracing/SceneApp.h" )
@@ -215,7 +213,7 @@ endif()
 #==================================================================================================
 # project: Samples.Planet
 #==================================================================================================
-if (${FG_ENABLE_SAMPLES} AND ${FG_ENABLE_GLM} AND ${FG_ENABLE_DEVIL})
+if (${FG_ENABLE_GLM} AND ${FG_ENABLE_DEVIL})
 	set( SOURCES 
 		"planet/shaders/gen_height.glsl"
 		"planet/shaders/planet.glsl"
