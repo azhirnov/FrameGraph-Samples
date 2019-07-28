@@ -1,4 +1,15 @@
 cmake_minimum_required( VERSION 3.10 FATAL_ERROR )
 
-add_subdirectory("framegraph")
+# this options required for samples
+set( FG_ENABLE_ASSIMP ON CACHE INTERNAL "" FORCE )
+set( FG_ENABLE_GLM ON CACHE INTERNAL "" FORCE )
+set( FG_ENABLE_DEVIL ON CACHE INTERNAL "" FORCE )
+set( FG_ENABLE_FREEIMAGE OFF CACHE INTERNAL "" FORCE )
+
+add_subdirectory("FrameGraph")
+
+set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${MAIN_BINARY_DIR}" )
+set( CMAKE_LIBRARY_OUTPUT_DIRECTORY "${MAIN_BINARY_DIR}" )
+set( CMAKE_RUNTIME_OUTPUT_DIRECTORY "${MAIN_BINARY_DIR}" )
+
 add_subdirectory("samples")
