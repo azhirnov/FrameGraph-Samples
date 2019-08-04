@@ -1,5 +1,8 @@
 cmake_minimum_required( VERSION 3.10 FATAL_ERROR )
 
+project( "FrameGraph-Samples" LANGUAGES C CXX )
+set_property( GLOBAL PROPERTY USE_FOLDERS ON )
+
 # this options required for samples
 set( FG_ENABLE_ASSIMP ON CACHE INTERNAL "" FORCE )
 set( FG_ENABLE_GLM ON CACHE INTERNAL "" FORCE )
