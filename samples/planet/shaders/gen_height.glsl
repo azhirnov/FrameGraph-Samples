@@ -24,28 +24,28 @@ layout(binding=1) writeonly restrict uniform image2D  un_OutNormal;
 
 float3 CenterOfVoronoiCell (float3 local, float3 global, float time)
 {
-    float3 coord = local + global;
-    return local + (sin( time * DHash33( coord ) * 0.628 ) * 0.5 + 0.5);
+	float3 coord = local + global;
+	return local + (sin( time * DHash33( coord ) * 0.628 ) * 0.5 + 0.5);
 }
 
 float VoronoiCircles (in float3 coord, float time)
 {
-    const int radius = 1;
+	const int radius = 1;
 
-    float3	ipoint	= Floor( coord );
-    float3	fpoint	= Fract( coord );
-    
-    float3	center	= fpoint;
-    float3	icenter	= float3(0.0);
-    
-    float	md		= 2147483647.0;
-    
+	float3	ipoint	= Floor( coord );
+	float3	fpoint	= Fract( coord );
+	
+	float3	center	= fpoint;
+	float3	icenter	= float3(0.0);
+	
+	float	md		= 2147483647.0;
+	
 	// find nearest circle
 	for (int z = -radius; z <= radius; ++z)
 	for (int y = -radius; y <= radius; ++y)
 	for (int x = -radius; x <= radius; ++x)
 	{
-        float3	cur	= float3(x, y, z);
+		float3	cur	= float3(x, y, z);
 		float3	c	= CenterOfVoronoiCell( float3(cur), ipoint, time );
 		float	d	= Dot( c - fpoint, c - fpoint );
 
@@ -65,8 +65,8 @@ float4 GetPosition (const int2 coord)
 {
 	float2	ncoord	= ToSNorm( float2(coord) / float2(pc.faceDim - 1) );
 	float3	pos		= PROJECTION( ncoord, pc.face );
-	float	height	= -VoronoiCircles( pos * 4.251 + 3.333, 3.5 ) * 0.1;
-	//float	height	= SDF_Sphere( Fract( pos * 4.0 ) - 0.5, 0.25 ) * 0.1;
+	//float	height	= -VoronoiCircles( pos * 4.251 + 3.333, 3.5 ) * 0.1;
+	float	height	= SDF_Sphere( Fract( pos * 4.0 ) - 0.5, 0.25 ) * 0.1;
 	return float4( pos * (1.0 + height), height );
 }
 

@@ -39,9 +39,15 @@ namespace FG
 	{
 		// will crash if it is not created as shared pointer
 		ASSERT( shared_from_this() );
+		
+		{
+			AppConfig	cfg;
+			cfg.surfaceSize		= uint2(1024, 768);
+			cfg.windowTitle		= "Ray tracing";
+			cfg.dbgOutputPath	= FG_DATA_PATH "_debug_output";
 
-		CHECK_ERR( _CreateFrameGraph( uint2(1024, 768), "Ray tracing", {}, FG_DATA_PATH "_debug_output" ));
-
+			CHECK_ERR( _CreateFrameGraph( cfg ));
+		}
 
 		// upload resource data
 		auto	cmdbuf = _frameGraph->Begin( CommandBufferDesc{ EQueueType::Graphics });

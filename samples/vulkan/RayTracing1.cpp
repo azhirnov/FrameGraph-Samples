@@ -518,7 +518,7 @@ bool RayTracingApp::CreateBottomLevelAS (ResourceInit &res)
 
 		res.onBind.push_back( [this, offset] (void *ptr) -> bool
 		{
-			memcpy( ptr + BytesU(offset), vertices, sizeof(vertices) );
+			std::memcpy( ptr + BytesU(offset), vertices, sizeof(vertices) );
 			VK_CHECK( vkBindBufferMemory( vulkan.GetVkDevice(), vertexBuffer, sharedHostMemory, offset ));
 			return true;
 		});
@@ -544,7 +544,7 @@ bool RayTracingApp::CreateBottomLevelAS (ResourceInit &res)
 
 		res.onBind.push_back( [this, offset] (void *ptr) -> bool
 		{
-			memcpy( ptr + BytesU(offset), indices, sizeof(indices) );
+			std::memcpy( ptr + BytesU(offset), indices, sizeof(indices) );
 			VK_CHECK( vkBindBufferMemory( vulkan.GetVkDevice(), indexBuffer, sharedHostMemory, offset ));
 			return true;
 		});
@@ -657,7 +657,7 @@ bool RayTracingApp::CreateTopLevelAS (ResourceInit &res)
 			instance.flags			= 0;
 			instance.accelerationStructureHandle = bottomLevelASHandle;
 
-			memcpy( ptr + BytesU(offset), &instance, sizeof(instance) );
+			std::memcpy( ptr + BytesU(offset), &instance, sizeof(instance) );
 
 			VK_CHECK( vkBindBufferMemory( vulkan.GetVkDevice(), instanceBuffer, sharedHostMemory, offset ));
 			return true;

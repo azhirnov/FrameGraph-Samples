@@ -164,3 +164,14 @@ void	Ray_SetLength (inout Ray ray, const float length)
 	ray.t   = length;
 	ray.pos = ray.origin + ray.dir * length;
 }
+
+/*
+=================================================
+	Ray_SetOrigin
+=================================================
+*/
+void	Ray_SetOrigin (inout Ray ray, const float3 origin)
+{
+	ray.origin	= origin;
+	ray.pos		= origin + ray.dir * ray.t;
+}

@@ -46,6 +46,7 @@ float SDF_OpExtrusion (const float posZ, const float dist, const float height);
 // Transformation
 float3 SDF_Move (const float3 position, const float3 delta);
 float3 SDF_Rotate (const float3 position, const quat q);
+float2 SDF_Rotate2D (const float2 position, const float angle);
 float3 SDF_Transform (const float3 position, const quat q, const float3 delta);
 
 
@@ -262,6 +263,15 @@ float3 SDF_Rotate (const float3 position, const quat q)
 float3 SDF_Transform (const float3 position, const quat q, const float3 delta)
 {
 	return SDF_Rotate( SDF_Move( position, delta ), q );
+}
+
+float2 SDF_Rotate2D (const float2 p, const float angle)
+{
+  	float2 sc = SinCos( angle );
+    float2 result;
+    result.x = p.x * sc.y - p.y * sc.x;
+  	result.y = p.x * sc.x + p.y * sc.y;
+    return result;
 }
 
 

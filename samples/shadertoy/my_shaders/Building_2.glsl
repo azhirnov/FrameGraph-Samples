@@ -43,10 +43,19 @@ const int	MTR_BUILLDING_1	= 1;
 
 DistAndMat SDFBuilding1 (const float3 position)
 {
-	const float3 center = float3(0.0, 0.0, -4.0);
-	const float3 pos	= SDF_Move( position, center );
-	const float  d		= SDF_OpExtrusion( pos.y, SDF_OpUnite(SDF_Rect( pos.xz + float2(0.75, 0.0), float2(1.0, 0.25) ),
-															  SDF_Rect( pos.xz + float2(0.0, 0.75), float2(0.25, 1.0) )), 1.0 );
+	const float3 center		= float3(0.0, 0.0, -4.0);
+	const float  height		= 4.0;
+	const float  rotation	= Pi() * 0.4 / height;
+
+	float3	pos = SDF_Move( position, center );
+	pos.xz = SDF_Rotate2D( pos.xz, pos.y * rotation );
+
+	const float  scale	= Abs(Sin( ((-pos.y*0.5 + 0.13) / height) * 2.14 + 1.0 ));
+	const float	 d1		= Max( Abs(pos.x) - 1.0 * scale, Abs(pos.z) - 1.0 * scale );
+	const float  d2		= Min( Abs(pos.z) - 0.2 * scale, Abs(pos.x) - 0.2 * scale );
+	const float  d3		= Max( Abs(pos.x) - 0.4 * scale, Abs(pos.z) - 0.4 * scale );
+	const float  d4		= Min( d3, Max(d1, d2) );
+	const float  d		= SDF_OpExtrusion( pos.y, d4, height );
 	return DM_Create( d, center, MTR_BUILLDING_1 );
 }
 
@@ -63,30 +72,10 @@ GEN_SDF_NORMAL_FN( SDFNormal, SDFScene, .dist )
 
 float3 MtrBuilding1 (const Ray ray, const DistAndMat dm, const float3 norm)
 {
-	float3	pos = ray.pos - dm.pos;
-	float2	uv  = float2(0.0, ToUNorm(pos.y) );
+	float3	light_dir	= -ray.dir; // Normalize(float3( 0.0, 1.0, 0.2 ));
 
-	if ( Abs(norm.y) < 0.7 )
-		uv.x = ToUNorm( Abs(norm.x) > Abs(norm.z) ? -pos.z : -pos.x );
-
-	uv = Fract( uv * 8.0*float2(1.0, 2.0) );
-	
-	// panel
-	float d2 = 1.0e10;
-	d2 = Min( d2, SDF_Rect( uv - float2(0.5, 0.5), float2(0.5, 0.5) ));
-	d2 = SmoothStep( 0.01, -0.01, d2 );
-	
-	// windows
-	float d1 = 1.0e+10;
-	d1 = Min( d1, SDF_Rect( uv - float2(0.37, 0.5), float2(0.08, 0.25) ));
-	d1 = Min( d1, SDF_Rect( uv - float2(0.2, 0.5), float2(0.08, 0.25) ));
-	d1 = Min( d1, SDF_Rect( uv - float2(0.78, 0.5), float2(0.12, 0.25) ));
-	d1 = SmoothStep( -0.01, 0.01, d1 );
-	
-	float mtr = d2*0.5 + d1*0.5;
-
-
-	return float3(mtr);
+	float	shading = Dot( norm, light_dir );
+	return float3(shading);
 }
 
 float4 RayTrace (in Ray ray)
@@ -100,7 +89,7 @@ float4 RayTrace (in Ray ray)
 	{
 		dm = SDFScene( ray.pos );
 
-		Ray_Move( INOUT ray, dm.dist );
+		Ray_Move( INOUT ray, dm.dist * 0.5 );
 
 		if ( Abs(dm.dist) < min_dist or ray.t > max_dist )
 			break;
@@ -117,6 +106,7 @@ float4 RayTrace (in Ray ray)
 	}
 	else
 	{
+		// sky
 		return float4(0.412, 0.796, 1.0, 0.0);
 	}
 }

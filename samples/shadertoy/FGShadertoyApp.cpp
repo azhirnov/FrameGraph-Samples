@@ -62,6 +62,7 @@ namespace FG
 		_samples.push_back( [SinglePass] ()  { SinglePass("my_shaders/ConvexShape2D.glsl"); });
 		_samples.push_back( [SinglePass] ()  { SinglePass("my_shaders/ConvexShape3D.glsl"); });
 		_samples.push_back( [SinglePass] ()  { SinglePass("my_shaders/Building_1.glsl"); });
+		_samples.push_back( [SinglePass] ()  { SinglePass("my_shaders/Building_2.glsl"); });
 
 		_samples.push_back( [this] ()
 		{
@@ -129,7 +130,12 @@ namespace FG
 */
 	bool FGShadertoyApp::Initialize ()
 	{
-		CHECK_ERR( _CreateFrameGraph( uint2(1024, 768), "Shadertoy", {FG_DATA_PATH "../shaderlib"}, FG_DATA_PATH "_debug_output" ));
+		AppConfig	cfg;
+		cfg.surfaceSize			= uint2(1024, 768);
+		cfg.windowTitle			= "Shadertoy";
+		cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib" };
+		cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
+		CHECK_ERR( _CreateFrameGraph( cfg ));
 
 		_CreateSamplers();
 		_InitSamples();
@@ -654,7 +660,7 @@ namespace FG
 				void main ()
 				{
 					vec2 coord = gl_FragCoord.xy;
-					coord.y = iResolution.y - coord.y;
+					coord.y = iResolution.y - coord.y - 1.0;
 
 					mainImage( out_Color, coord );
 				}

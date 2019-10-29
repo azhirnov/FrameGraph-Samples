@@ -37,7 +37,7 @@ int main ()
 	ClearImage_Sample();
 	CacheTest_Sample1();
 	ZOrderPattern_Sample1();
-
+	
 	FG_LOGI( "Vulkan samples finished" );
 	//std::cin.ignore();
 	return 0;

@@ -814,13 +814,12 @@ void BlockRender(in vec2 fragCoord)
     }
 }
 #endif
+//-----------------------------------------------------------------------------
+
 
 void mainVR (out vec4 fragColor, in vec2 fragCoord, in vec3 fragRayOri, in vec3 fragRayDir)
 {
-	Ray	ray;
-	ray.origin	= fragRayOri;
-	ray.dir		= fragRayDir;
-	ray.pos		= ray.origin + ray.dir * 0.1;
+	Ray	ray = Ray_Create( fragRayOri, fragRayDir, 0.1 );
 
     localTime = iTime;
     vec3 finalColor = RayTrace(ray, fragCoord);

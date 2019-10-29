@@ -154,10 +154,8 @@ float SDFScene (const float3 pos)
 GEN_SDF_NORMAL_FN( SDFNormal, SDFScene, )
 
 
-void mainImage (out float4 fragColor, in float2 fragCoord)
+float4 TraceRay (Ray ray)
 {
-	Ray	ray = Ray_From( iCameraFrustumLB, iCameraFrustumRB, iCameraFrustumLT, iCameraFrustumRT,
-						iCameraPos, 0.5, fragCoord / iResolution.xy );
 #if 1
 	const int		max_iter	= 256;
 	const float		min_dist	= 0.00625f;
@@ -175,18 +173,15 @@ void mainImage (out float4 fragColor, in float2 fragCoord)
 	}
 
 	if ( ray.t > max_dist )
-	{
-		fragColor = float4(0.0, 0.0, 0.3, 1.0);
-		return;
-	}
+		return float4(0.0, 0.0, 0.3, 1.0);
 
 	float3	norm		= SDFNormal( ray.pos );
 	float3	light_dir	= -ray.dir; // Normalize(float3( 0.0, 1.0, 0.2 ));
 
 	float	shading = Dot( norm, light_dir );
 
-	//fragColor = float4( ToUNorm(norm), 1.0 );
-	fragColor = float4( shading );
+	//return float4( ToUNorm(norm), 1.0 );
+	return float4( shading );
 
 #else
 	// debug
@@ -211,12 +206,25 @@ void mainImage (out float4 fragColor, in float2 fragCoord)
 
 			float	dist = SDFScene( ray.pos );
 			
-			fragColor = float4(dist);
-			//fragColor = (dist + 2.0) * (0.5 + 0.5*Sin(16.0*dist)) * float4(1.0);
-			return;
+			return float4(dist);
+			//return (dist + 2.0) * (0.5 + 0.5*Sin(16.0*dist)) * float4(1.0);
 		}
 	}
 
-	fragColor = float4(0.0, 0.0, 0.3, 1.0);
+	return float4(0.0, 0.0, 0.3, 1.0);
 #endif
+}
+
+void mainImage (out float4 fragColor, in float2 fragCoord)
+{
+	Ray	ray = Ray_From( iCameraFrustumLB, iCameraFrustumRB, iCameraFrustumLT, iCameraFrustumRT,
+						iCameraPos, 0.5, fragCoord / iResolution.xy );
+	fragColor = TraceRay( ray );
+}
+
+void mainVR (out vec4 fragColor, in vec2 fragCoord, in vec3 fragRayOri, in vec3 fragRayDir)
+{
+	Ray	ray = Ray_Create( fragRayOri, fragRayDir, 0.5 );
+
+	fragColor = TraceRay( ray );
 }

@@ -48,8 +48,9 @@ namespace FG
 		{
 		// types
 			struct Channel {
-				String	name;
-				uint	index	= UMax;
+				String			name;
+				uint			index	= UMax;
+				RawSamplerID	samp;
 			};
 			using Channels_t = FixedArray< Channel, CountOf(&ShadertoyUB::iChannelResolution) >;
 			
@@ -60,14 +61,16 @@ namespace FG
 			Optional<float>			_surfaceScale;
 			Optional<uint2>			_surfaceSize;
 			Optional<EPixelFormat>	_format;
+			RawSamplerID			_sampler;
 
 		// methods
 			ShaderDescr () {}
-			ShaderDescr&  Pipeline (String &&file, String &&def = "")	{ _pplnFilename = std::move(file);  _pplnDefines = std::move(def);  return *this; }
-			ShaderDescr&  InChannel (const String &name, uint index)	{ _channels.push_back({ name, index });  return *this; }
-			ShaderDescr&  SetScale (float value)						{ _surfaceScale = value;  return *this; }
-			ShaderDescr&  SetDimension (uint2 value)					{ _surfaceSize = value;  return *this; }
-			ShaderDescr&  SetFormat (EPixelFormat value)				{ _format = value;  return *this; }
+			ShaderDescr&  Pipeline (String &&file, String &&def = "")               	{ _pplnFilename = std::move(file);  _pplnDefines = std::move(def);  return *this; }
+			ShaderDescr&  InChannel (const String &name, uint index, RawSamplerID samp)	{ _channels.push_back({ name, index, samp });  return *this; }
+			ShaderDescr&  InChannel (const String &name, uint index)					{ _channels.push_back({ name, index, {} });  return *this; }
+			ShaderDescr&  SetScale (float value)										{ _surfaceScale = value;  return *this; }
+			ShaderDescr&  SetDimension (uint2 value)									{ _surfaceSize = value;  return *this; }
+			ShaderDescr&  SetFormat (EPixelFormat value)								{ _format = value;  return *this; }
 		};
 
 

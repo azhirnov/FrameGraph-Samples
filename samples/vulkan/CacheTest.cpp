@@ -379,8 +379,8 @@ bool CacheTestApp::Run ()
 				region.dstSubresource	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
 
 				vkCmdBlitImage( cmdBuffers[i], renderTarget, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-							    swapchain->GetCurrentImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-							    1, &region, VK_FILTER_LINEAR );
+								swapchain->GetCurrentImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+								1, &region, VK_FILTER_LINEAR );
 			}
 
 			// transfer_dst -> present_src

@@ -46,7 +46,13 @@ namespace {
 */
 	bool GenPlanetApp::Initialize ()
 	{
-		CHECK_ERR( _CreateFrameGraph( uint2(1024, 768), "Planet generator", {FG_DATA_PATH "../shaderlib", FG_DATA_PATH "shaders"}, FG_DATA_PATH "_debug_output" ));
+		AppConfig	cfg;
+		cfg.surfaceSize			= uint2(1024, 768);
+		cfg.windowTitle			= "Planet generator";
+		cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib", FG_DATA_PATH "shaders" };
+		cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
+
+		CHECK_ERR( _CreateFrameGraph( cfg ));
 		
 		_depthBuffer = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, uint3{GetSurfaceSize()}, EPixelFormat::Depth24_Stencil8, EImageUsage::DepthStencilAttachment },
 												 Default, "DepthBuffer" );
@@ -100,7 +106,7 @@ namespace {
 		{
 			_planet.dbgColorMap = _frameGraph->CreateImage( ImageDesc{ EImage::TexCube, uint3(4,4,1), EPixelFormat::RGBA8_UNorm,
 																	   EImageUsage::TransferDst | EImageUsage::Sampled, 6_layer },
-														    Default, "Planet.DbgColor" );
+															Default, "Planet.DbgColor" );
 			CHECK_ERR( _planet.dbgColorMap );
 
 			for (uint i = 0; i < 6; ++i) {
@@ -148,7 +154,7 @@ namespace {
 	{
 		ComputePipelineDesc	desc;
 		desc.AddShader( EShaderLangFormat::VKSL_110 | EShaderLangFormat::EnableDebugTrace,
-					    "main",
+						"main",
 						"#define PROJECTION  CM_TangentialSC_Forward\n\n"s
 							<< _LoadShader( "shaders/gen_height.glsl" )
 						);
