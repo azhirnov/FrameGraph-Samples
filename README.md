@@ -8,6 +8,8 @@ Experiments with ray tracing extension.
 - [ ] PBR
 ![image](screenshots/ray_tracing.jpg)
 
+used glTF Sponza from https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/Sponza
+
 
 ## Planet rendering
 - [x] Identity projection
