@@ -69,7 +69,7 @@ bool ZOrderPatternApp::Initialize ()
 								  {{ VK_QUEUE_PRESENT_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 0.0f }},
 								  VulkanDevice::GetRecomendedInstanceLayers(),
 								  VulkanDevice::GetRecomendedInstanceExtensions(),
-								  { VK_NV_SHADER_IMAGE_FOOTPRINT_EXTENSION_NAME }
+								  {}
 			));
 		
 		vulkan.CreateDebugUtilsCallback( VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT );

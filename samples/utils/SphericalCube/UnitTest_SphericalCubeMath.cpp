@@ -2,35 +2,36 @@
 
 #include "SphericalCubeMath.h"
 
-using namespace FG;
+using namespace FGC;
 
 #define TEST	CHECK_FATAL
 
-
-template <typename Projection>
-static void Test_ForwardInverseProjection ()
+namespace
 {
-	static constexpr uint	lod = 12;
-	static constexpr double	err = 0.0001;
-
-	for (uint face = 0; face < 6; ++face)
+	template <typename Projection>
+	void Test_ForwardInverseProjection ()
 	{
-		for (uint y = 1; y < lod+2; ++y)
-		for (uint x = 1; x < lod+2; ++x)
+		static constexpr uint	lod = 12;
+		static constexpr double	err = 0.0001;
+
+		for (uint face = 0; face < 6; ++face)
 		{
-			const double2  ncoord = double2{ double(x)/(lod+2), double(y)/(lod+2) } * 2.0 - 1.0;
+			for (uint y = 1; y < lod+2; ++y)
+			for (uint x = 1; x < lod+2; ++x)
+			{
+				const double2  ncoord = double2{ double(x)/(lod+2), double(y)/(lod+2) } * 2.0 - 1.0;
 
-			const double3  forward = Projection::Forward( ncoord, ECubeFace(face) );
+				const double3  forward = Projection::Forward( ncoord, ECubeFace(face) );
 
-			auto[inv, inv_face] = Projection::Inverse( forward );
+				auto[inv, inv_face] = Projection::Inverse( forward );
 
-			TEST( uint(inv_face) == face );
-			TEST(Equals( ncoord.x, inv.x, err ));
-			TEST(Equals( ncoord.y, inv.y, err ));
+				TEST( uint(inv_face) == face );
+				TEST(Equals( ncoord.x, inv.x, err ));
+				TEST(Equals( ncoord.y, inv.y, err ));
+			}
 		}
 	}
 }
-
 
 extern void UnitTest_SphericalCubeMath ()
 {

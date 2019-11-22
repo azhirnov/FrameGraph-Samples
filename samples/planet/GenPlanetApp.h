@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "SphericalCube.h"
+#include "SphericalCube/SphericalCube.h"
 #include "scene/BaseSceneApp.h"
 
 namespace FG

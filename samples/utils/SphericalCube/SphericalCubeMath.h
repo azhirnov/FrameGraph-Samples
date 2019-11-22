@@ -4,7 +4,7 @@
 
 #include "scene/Math/Spherical.h"
 
-namespace FG
+namespace FGC
 {
 
 	enum class ECubeFace
@@ -168,4 +168,4 @@ namespace FG
 	};
 
 
-}	// FG
+}	// FGC

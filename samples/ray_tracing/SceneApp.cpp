@@ -85,29 +85,28 @@ namespace FG
 		AssimpLoader			loader;
 		AssimpLoader::Config	cfg;
 
-		IntermScenePtr	sponza = loader.Load( cfg, FG_DATA_PATH "../_data/sponza/sponza.obj" );
+		IntermScenePtr	sponza = loader.Load( cfg, FG_DATA_PATH "sponza/sponza.gltf" );
 		CHECK_ERR( sponza );
 		
 		DevILLoader		img_loader;
-		CHECK_ERR( img_loader.Load( sponza, {FG_DATA_PATH "../_data/sponza"}, _scene->GetImageCache() ));
+		CHECK_ERR( img_loader.Load( sponza, {FG_DATA_PATH "sponza"}, _scene->GetImageCache() ));
 		
-		IntermScenePtr	bunny = loader.Load( cfg, FG_DATA_PATH "../_data/bunny/bunny.obj" );
+		IntermScenePtr	bunny = loader.Load( cfg, FG_DATA_PATH "bunny/bunny.obj" );
 		CHECK_ERR( bunny );
 		
 		// setup material
 		{
 			auto&	mtr = bunny->GetMaterials().begin()->first->EditSettings();
 			mtr.albedo			= RGBA32f{ 0.8f, 0.8f, 1.0f, 1.0f };
-			mtr.opticalDepth	= 2.6f;
+			mtr.opticalDepth	= 1.6f;
 			mtr.refraction		= 1.31f;	// ice
 		}
 
 		Transform	transform;
-		transform.scale = 20.0f;
-		transform.position.y += 4.5f;
+		transform.scale = 0.2f;
 		sponza->Append( *bunny, transform );
 
-		transform.scale	= 0.01f;
+		transform.scale	= 200.0f;
 		transform.position = vec3(0.0f);
 
 		auto	hierarchy = MakeShared<SimpleRayTracingScene>();

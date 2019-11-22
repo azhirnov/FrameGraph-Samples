@@ -389,7 +389,7 @@ void GenMipmapsApp::Destroy ()
 */
 void GenMipmapsApp::GenMipmapsOnGraphicsShader (VkCommandBuffer cmd, OUT VkImageLayout &layout)
 {
-	for (size_t i = 1; i < numMipmaps; ++i)
+	for (uint i = 1; i < numMipmaps; ++i)
 	{
 		const uint2	size = Max( imageSize >> i, 1u );
 
@@ -452,7 +452,7 @@ void GenMipmapsApp::GenMipmapsOnTransferCommands (VkCommandBuffer cmd, OUT VkIma
 	
 	barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-	for (size_t i = 1; i < numMipmaps; ++i)
+	for (uint i = 1; i < numMipmaps; ++i)
 	{
 		int2	src_size	= Max( uint2(1), imageSize >> (i-1) );
 		int2	dst_size	= Max( uint2(1), imageSize >> i );
@@ -500,7 +500,7 @@ void GenMipmapsApp::GenMipmapsOnTransferCommands2 (VkCommandBuffer cmd, OUT VkIm
 	vkCmdPipelineBarrier( cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
 						  0, null, 0, null, 1, &barrier );
 
-	for (size_t i = 1; i < numMipmaps; ++i)
+	for (uint i = 1; i < numMipmaps; ++i)
 	{
 		int2	src_size	= Max( uint2(1), imageSize >> (i-1) );
 		int2	dst_size	= Max( uint2(1), imageSize >> i );

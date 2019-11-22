@@ -9,10 +9,14 @@ set( FG_ENABLE_GLM ON CACHE INTERNAL "" FORCE )
 set( FG_ENABLE_DEVIL ON CACHE INTERNAL "" FORCE )
 set( FG_ENABLE_FREEIMAGE OFF CACHE INTERNAL "" FORCE )
 
-add_subdirectory("FrameGraph")
+add_subdirectory( "FrameGraph" )
 
 set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${MAIN_BINARY_DIR}" )
 set( CMAKE_LIBRARY_OUTPUT_DIRECTORY "${MAIN_BINARY_DIR}" )
 set( CMAKE_RUNTIME_OUTPUT_DIRECTORY "${MAIN_BINARY_DIR}" )
 
-add_subdirectory("samples")
+add_subdirectory( "samples/planet" )
+add_subdirectory( "samples/ray_tracing" )
+add_subdirectory( "samples/utils" )
+add_subdirectory( "samples/shadertoy" )
+add_subdirectory( "samples/vulkan" )
