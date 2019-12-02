@@ -45,6 +45,7 @@ namespace FG
 			cfg.surfaceSize		= uint2(1024, 768);
 			cfg.windowTitle		= "Ray tracing";
 			cfg.dbgOutputPath	= FG_DATA_PATH "_debug_output";
+			cfg.enableDebugLayers	= false;
 
 			CHECK_ERR( _CreateFrameGraph( cfg ));
 		}

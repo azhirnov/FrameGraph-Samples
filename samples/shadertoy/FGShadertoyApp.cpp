@@ -130,12 +130,16 @@ namespace FG
 */
 	bool FGShadertoyApp::Initialize ()
 	{
-		AppConfig	cfg;
-		cfg.surfaceSize			= uint2(1024, 768);
-		cfg.windowTitle			= "Shadertoy";
-		cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib" };
-		cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
-		CHECK_ERR( _CreateFrameGraph( cfg ));
+		{
+			AppConfig	cfg;
+			cfg.surfaceSize			= uint2(1024, 768);
+			cfg.windowTitle			= "Shadertoy";
+			cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib" };
+			cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
+			cfg.enableDebugLayers	= false;
+
+			CHECK_ERR( _CreateFrameGraph( cfg ));
+		}
 
 		_CreateSamplers();
 		_InitSamples();

@@ -46,14 +46,16 @@ namespace {
 */
 	bool GenPlanetApp::Initialize ()
 	{
-		AppConfig	cfg;
-		cfg.surfaceSize			= uint2(1024, 768);
-		cfg.windowTitle			= "Planet generator";
-		cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib", FG_DATA_PATH "shaders" };
-		cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
+		{
+			AppConfig	cfg;
+			cfg.surfaceSize			= uint2(1024, 768);
+			cfg.windowTitle			= "Planet generator";
+			cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib", FG_DATA_PATH "shaders" };
+			cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
+			cfg.enableDebugLayers	= false;
 
-		CHECK_ERR( _CreateFrameGraph( cfg ));
-		
+			CHECK_ERR( _CreateFrameGraph( cfg ));
+		}		
 		_depthBuffer = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, uint3{GetSurfaceSize()}, EPixelFormat::Depth24_Stencil8, EImageUsage::DepthStencilAttachment },
 												 Default, "DepthBuffer" );
 		CHECK_ERR( _depthBuffer );
