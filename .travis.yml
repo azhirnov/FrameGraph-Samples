@@ -10,6 +10,6 @@ matrix:
       script:
         - mkdir -p build
         - cd build
-        - cmake -G "Visual Studio 15 2017 Win64" -DFG_EXTERNALS_USE_PREBUILD=ON .. 
+        - cmake -G "Visual Studio 15 2017 Win64" -DFG_EXTERNALS_USE_PREBUILD=ON -DFG_ENABLE_TESTS=OFF .. 
         - cmake --build . --config Release
       
