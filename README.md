@@ -1,3 +1,5 @@
+[![Build Status](https://api.travis-ci.com/azhirnov/FrameGraph-Samples.svg?branch=dev)](https://travis-ci.com/azhirnov/FrameGraph-Samples)
+
 # FrameGraph Samples
 
 ## Ray tracing
