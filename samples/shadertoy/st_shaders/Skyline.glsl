@@ -8,22 +8,13 @@ To the extent possible under law, the author(s) have dedicated all copyright and
 -Otavio Good
 */
 
+#define HIGH_QUILITY 1
+
 #include "RayTracing.glsl"
-
-// ---------------- Config ----------------
-// This is an option that lets you render high quality frames for screenshots. It enables
-// stochastic antialiasing and motion blur automatically for any shader.
-//#define NON_REALTIME_HQ_RENDER
-const float frameToRenderHQ = 50.0; // Time in seconds of frame to render
-const float antialiasingSamples = 16.0; // 16x antialiasing - too much might make the shader compiler angry.
-
-//#define MANUAL_CAMERA
-
 
 // --------------------------------------------------------
 // These variables are for the non-realtime block renderer.
 float localTime = 0.0;
-float seed = 1.0;
 
 // Animation variables
 float fade = 1.0;
@@ -120,12 +111,12 @@ float saturate(float a) { return clamp(a, 0.0, 1.0); }
 // This function basically is a procedural environment map that makes the sun
 vec3 GetSunColorSmall(vec3 rayDir, vec3 sunDir)
 {
-	vec3 localRay = normalize(rayDir);
-	float dist = 1.0 - (dot(localRay, sunDir) * 0.5 + 0.5);
-	float sunIntensity = 0.05 / dist;
+    vec3 localRay = normalize(rayDir);
+    float dist = 1.0 - (dot(localRay, sunDir) * 0.5 + 0.5);
+    float sunIntensity = 0.05 / dist;
     sunIntensity += exp(-dist*150.0)*7000.0;
-	sunIntensity = min(sunIntensity, 40000.0);
-	return sunCol * sunIntensity*0.025;
+    sunIntensity = min(sunIntensity, 40000.0);
+    return sunCol * sunIntensity*0.025;
 }
 
 vec3 GetEnvMap(vec3 rayDir, vec3 sunDir)
@@ -161,7 +152,7 @@ vec3 GetEnvMapSkyline(vec3 rayDir, vec3 sunDir, float height)
     mask = saturate(mask + (1.0-hor*vert)*0.05);
     finalColor = mix(finalColor * vec3(0.1,0.07,0.05), finalColor, mask);
 
-	return finalColor;
+    return finalColor;
 }
 
 // min function that supports materials in the y component
@@ -194,7 +185,7 @@ float cylCap(vec3 p, float r, float lenRad)
 // smooth blending function
 float smin(float a, float b, float k)
 {
-	return log2(exp2(k*a)+exp2(k*b))/k;
+    return log2(exp2(k*a)+exp2(k*b))/k;
 }
 
 float Repeat(float a, float len)
@@ -248,7 +239,7 @@ vec2 CityBlock(vec3 p, vec2 pint)
     height += 0.1;	// minimum building height
     //height += sin(iTime + pint.x);	// animate the building heights if you're feeling silly
     height = floor(height*20.0)*0.05;	// height is in floor units - each floor is 0.05 high.
-	float d = sdBox(baseCenter, vec3(baseRad, height, baseRad)); // large building piece
+    float d = sdBox(baseCenter, vec3(baseRad, height, baseRad)); // large building piece
 
     // road
     d = min(d, p.y);
@@ -260,30 +251,30 @@ vec2 CityBlock(vec3 p, vec2 pint)
     height2 = floor(height2*20.0)*0.05;	// floor units
     rand2 = floor(rand2*20.0)*0.05;	// floor units
     // size pieces of building
-	d = min(d, sdBox(baseCenter - vec3(0.0, height, 0.0), vec3(baseRad, height2 - rand2.y, baseRad*0.4)));
-	d = min(d, sdBox(baseCenter - vec3(0.0, height, 0.0), vec3(baseRad*0.4, height2 - rand2.x, baseRad)));
+    d = min(d, sdBox(baseCenter - vec3(0.0, height, 0.0), vec3(baseRad, height2 - rand2.y, baseRad*0.4)));
+    d = min(d, sdBox(baseCenter - vec3(0.0, height, 0.0), vec3(baseRad*0.4, height2 - rand2.x, baseRad)));
     // second building section
     if (rand2.y > 0.25)
     {
-		d = min(d, sdBox(baseCenter - vec3(0.0, height, 0.0), vec3(baseRad*0.8, height2, baseRad*0.8)));
+        d = min(d, sdBox(baseCenter - vec3(0.0, height, 0.0), vec3(baseRad*0.8, height2, baseRad*0.8)));
         // subtract off piece from top so it looks like there's a wall around the roof.
         float topWidth = baseRad;
         if (height2 > 0.0) topWidth = baseRad * 0.8;
-		d = max(d, -sdBox(baseCenter - vec3(0.0, height+height2, 0.0), vec3(topWidth-0.0125, 0.015, topWidth-0.0125)));
+        d = max(d, -sdBox(baseCenter - vec3(0.0, height+height2, 0.0), vec3(topWidth-0.0125, 0.015, topWidth-0.0125)));
     }
     else
     {
         // Cylinder top section of building
-		if (height2 > 0.0) d = min(d, cylCap((baseCenter - vec3(0.0, height, 0.0)).xzy, baseRad*0.8, height2));
+        if (height2 > 0.0) d = min(d, cylCap((baseCenter - vec3(0.0, height, 0.0)).xzy, baseRad*0.8, height2));
     }
     // mini elevator shaft boxes on top of building
-	d = min(d, sdBox(baseCenter - vec3((rand.x-0.5)*baseRad, height+height2, (rand.y-0.5)*baseRad),
+    d = min(d, sdBox(baseCenter - vec3((rand.x-0.5)*baseRad, height+height2, (rand.y-0.5)*baseRad),
                      vec3(baseRad*0.3*rand.z, 0.1*rand2.y, baseRad*0.3*rand2.x+0.025)));
     // mirror another box (and scale it) so we get 2 boxes for the price of 1.
     vec3 boxPos = baseCenter - vec3((rand2.x-0.5)*baseRad, height+height2, (rand2.y-0.5)*baseRad);
     float big = sign(boxPos.x);
     boxPos.x = abs(boxPos.x)-0.02 - baseRad*0.3*rand.w;
-	d = min(d, sdBox(boxPos,
+    d = min(d, sdBox(boxPos,
     vec3(baseRad*0.3*rand.w, 0.07*rand.y, baseRad*0.2*rand.x + big*0.025)));
 
     // Put domes on some building tops for variety
@@ -384,18 +375,18 @@ void CalcWindows(vec2 block, vec3 pos, inout vec3 texColor, inout float windowRe
 vec3 RayTrace (const Ray ray, const vec2 fragCoord)
 {
     marchCount = 0.0;
-	// -------------------------------- animate ---------------------------------------
+    // -------------------------------- animate ---------------------------------------
     sunCol = vec3(258.0, 248.0, 200.0) / 3555.0;
-	sunDir = normalize(vec3(0.93, 1.0, 1.0));
+    sunDir = normalize(vec3(0.93, 1.0, 1.0));
     horizonCol = vec3(1.0, 0.95, 0.85)*0.9;
     skyCol = vec3(0.3,0.5,0.95);
     exposure = 1.0;
     fade = 1.0;
 
-	vec3 camPos, camUp, camLookat;
-	// ------------------- Set up the camera rays for ray marching --------------------
+    vec3 camPos, camUp, camLookat;
+    // ------------------- Set up the camera rays for ray marching --------------------
     // Map uv to [-1.0..1.0]
-	vec2 uv = fragCoord.xy/iResolution.xy * 2.0 - 1.0;
+    vec2 uv = fragCoord.xy/iResolution.xy * 2.0 - 1.0;
     uv /= 2.0;  // zoom in
 
     // Do the camera fly-by animation and different scenes.
@@ -480,22 +471,32 @@ vec3 RayTrace (const Ray ray, const vec2 fragCoord)
         camLookat=vec3(0.3,0.15,0.0);
     }
 
-	// Camera setup for ray tracing / marching
-	vec3 rayVec = ray.dir;
-	camPos += ray.origin;
-	vec3 sideNorm=normalize(cross(camUp, rayVec));
-	vec3 upNorm=cross(rayVec, sideNorm);
-	vec3 worldFacing=(camPos + rayVec);
-	vec3 worldPix = worldFacing + uv.x * sideNorm * (iResolution.x/iResolution.y) + uv.y * upNorm;
+    // Camera setup for ray tracing / marching
+    vec3 rayVec = ray.dir;
+    camPos += ray.origin;
+    vec3 sideNorm=normalize(cross(camUp, rayVec));
+    vec3 upNorm=cross(rayVec, sideNorm);
+    vec3 worldFacing=(camPos + rayVec);
+    vec3 worldPix = worldFacing + uv.x * sideNorm * (iResolution.x/iResolution.y) + uv.y * upNorm;
 
-	// ----------------------------- Ray march the scene ------------------------------
-	vec2 distAndMat;  // Distance and material
-	float t = 0.05;// + Hash2d(uv)*0.1;	// random dither-fade things close to the camera
-	const float maxDepth = 45.0; // farthest distance rays will travel
-	vec3 pos = vec3(0.0);
-    const float smallVal = 0.000625;
-	// ray marching time
-    for (int i = 0; i < 250; i++)	// This is the count of the max times the ray actually marches.
+    // ----------------------------- Ray march the scene ------------------------------
+    vec2 distAndMat;  // Distance and material
+    float t = 0.05;// + Hash2d(uv)*0.1;	// random dither-fade things close to the camera
+    const float maxDepth = 45.0; // farthest distance rays will travel
+    vec3 pos = vec3(0.0);
+
+#if HIGH_QUILITY
+    const float smallVal        = 0.000125;
+    const int   maxIter         = 500;
+    const int   maxShadowIter   = 125;
+#else
+    const float smallVal        = 0.000625;
+    const int   maxIter         = 250;
+    const int   maxShadowIter   = 40;
+#endif
+
+    // ray marching time
+    for (int i = 0; i < maxIter; i++)	// This is the count of the max times the ray actually marches.
     {
         marchCount+=1.0;
         // Step along the ray.
@@ -537,13 +538,13 @@ vec3 RayTrace (const Ray ray, const vec2 fragCoord)
         distAndMat.y = 0.0;
         distAndMat.x = 0.0;
     }
-	// --------------------------------------------------------------------------------
-	// Now that we have done our ray marching, let's put some color on this geometry.
-	vec3 finalColor = vec3(0.0);
+    // --------------------------------------------------------------------------------
+    // Now that we have done our ray marching, let's put some color on this geometry.
+    vec3 finalColor = vec3(0.0);
 
-	// If a ray actually hit the object, let's light it.
+    // If a ray actually hit the object, let's light it.
     if ((t <= maxDepth) || (t == alpha))
-	{
+    {
         float dist = distAndMat.x;
         // calculate the normal from the distance field. The distance field is a volume, so if you
         // sample the current point and neighboring points, you can use the difference to get
@@ -577,11 +578,11 @@ vec3 RayTrace (const Ray ray, const vec2 fragCoord)
         float sunShadow = 1.0;
         float iter = 0.01;
         vec3 nudgePos = pos + normal*0.002;	// don't start tracing too close or inside the object
-		for (int i = 0; i < 40; i++)
+        for (int i = 0; i < maxShadowIter; i++)
         {
             vec3 shadowPos = nudgePos + sunDir * iter;
             float tempDist = DistanceToObject(shadowPos).x;
-	        sunShadow *= saturate(tempDist*150.0);	// Shadow hardness
+            sunShadow *= saturate(tempDist*150.0);	// Shadow hardness
             if (tempDist <= 0.0) break;
 
             float walk = tempDist;
@@ -767,7 +768,7 @@ vec3 RayTrace (const Ray ray, const vec2 fragCoord)
         // visualize length of gradient of distance field to check distance field correctness
         //finalColor = vec3(0.5) * (length(normalU) / smallVec.x);
         //finalColor = vec3(marchCount)/255.0;
-	}
+    }
     else
     {
         // Our ray trace hit nothing, so draw sky.
@@ -778,60 +779,52 @@ vec3 RayTrace (const Ray ray, const vec2 fragCoord)
     finalColor *= vec3(1.0) * saturate(1.0 - length(uv/2.5));
     finalColor *= 1.3*exposure;
 
-	// output the final color without gamma correction - will do gamma later.
-	return vec3(clamp(finalColor, 0.0, 1.0)*saturate(fade+0.2));
+    // output the final color without gamma correction - will do gamma later.
+    return vec3(clamp(finalColor, 0.0, 1.0)*saturate(fade+0.2));
 }
-
-#ifdef NON_REALTIME_HQ_RENDER
-// This function breaks the image down into blocks and scans
-// through them, rendering 1 block at a time. It's for non-
-// realtime things that take a long time to render.
-
-// This is the frame rate to render at. Too fast and you will
-// miss some blocks.
-const float blockRate = 20.0;
-void BlockRender(in vec2 fragCoord)
-{
-    // blockSize is how much it will try to render in 1 frame.
-    // adjust this smaller for more complex scenes, bigger for
-    // faster render times.
-    const float blockSize = 64.0;
-    // Make the block repeatedly scan across the image based on time.
-    float frame = floor(iTime * blockRate);
-    vec2 blockRes = floor(iResolution.xy / blockSize) + vec2(1.0);
-    // ugly bug with mod.
-    //float blockX = mod(frame, blockRes.x);
-    float blockX = fract(frame / blockRes.x) * blockRes.x;
-    //float blockY = mod(floor(frame / blockRes.x), blockRes.y);
-    float blockY = fract(floor(frame / blockRes.x) / blockRes.y) * blockRes.y;
-    // Don't draw anything outside the current block.
-    if ((fragCoord.x - blockX * blockSize >= blockSize) ||
-    	(fragCoord.x - (blockX - 1.0) * blockSize < blockSize) ||
-    	(fragCoord.y - blockY * blockSize >= blockSize) ||
-    	(fragCoord.y - (blockY - 1.0) * blockSize < blockSize))
-    {
-        discard;
-    }
-}
-#endif
 //-----------------------------------------------------------------------------
 
 
+vec4 Trace (const Ray ray, const vec2 fragCoord)
+{
+    localTime = iTime;
+    vec3 finalColor = vec3(0.0);
+
+#if HIGH_QUILITY
+    const float antialiasingSamples = 16.0;
+    float seed = 1.0;
+
+    for (float i = 0.0; i < antialiasingSamples; i++)
+    {
+        vec2 jittered = fragCoord.xy + vec2(
+            Hash21(fragCoord + seed),
+            Hash21(fragCoord*7.234567 + seed)
+            );
+
+        if (antialiasingSamples == 1.0)
+            jittered = fragCoord;
+
+        finalColor += RayTrace(ray, jittered);
+        seed *= 1.01234567;
+    }
+    finalColor /= antialiasingSamples;
+
+#else
+    finalColor = RayTrace(ray, fragCoord);
+#endif
+
+    return vec4(sqrt(clamp(finalColor, 0.0, 1.0)),1.0);
+}
+
 void mainVR (out vec4 fragColor, in vec2 fragCoord, in vec3 fragRayOri, in vec3 fragRayDir)
 {
-	Ray	ray = Ray_Create( fragRayOri, fragRayDir, 0.1 );
-
-    localTime = iTime;
-    vec3 finalColor = RayTrace(ray, fragCoord);
-    fragColor = vec4(sqrt(clamp(finalColor, 0.0, 1.0)),1.0);
+    Ray	ray = Ray_Create( fragRayOri, fragRayDir, 0.1 );
+    fragColor = Trace( ray, fragCoord );
 }
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
-	Ray	ray = Ray_From( iCameraFrustumLB, iCameraFrustumRB, iCameraFrustumLT, iCameraFrustumRT,
-						iCameraPos, 0.1, fragCoord / iResolution.xy );
-
-    localTime = iTime;
-    vec3 finalColor = RayTrace(ray, fragCoord);
-    fragColor = vec4(sqrt(clamp(finalColor, 0.0, 1.0)),1.0);
+    Ray	ray = Ray_From( iCameraFrustumLB, iCameraFrustumRB, iCameraFrustumLT, iCameraFrustumRT,
+                        iCameraPos, 0.1, fragCoord / iResolution.xy );
+    fragColor = Trace( ray, fragCoord );
 }

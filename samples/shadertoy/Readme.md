@@ -9,6 +9,7 @@
 `T` - reset time<br/>
 `F` - freeze time<br/>
 `U` - run shader debugger for pixel under cursor<br/>
+`L` - start/stop video recording<br/>
 `space` - pause rendering<br/>
 `escape` - exit<br/>
 `left mouse button` - rotate by mouse<br/>
