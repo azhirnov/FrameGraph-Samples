@@ -33,7 +33,6 @@ namespace FG
 		uint2					_targetSize;
 		EViewMode				_viewMode		= EViewMode::Mono;
 
-		Optional<vec2>			_debugPixel;
 		RGBA32f					_selectedPixel;
 		
 		TimePoint_t				_startTime;

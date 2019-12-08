@@ -133,6 +133,16 @@ namespace FG
 		_lastMousePos	= pos;
 		_mousePressed	= pressed;
 	}
+	
+/*
+=================================================
+	DebugPixel
+=================================================
+*/
+	void  ShaderView::DebugPixel (const vec2 &coord)
+	{
+		_debugPixel = coord;
+	}
 
 /*
 =================================================
@@ -262,14 +272,13 @@ namespace FG
 		draw_task.AddResources( DescriptorSetID{"0"}, &pass.resources );
 		draw_task.Draw( 4 ).SetTopology( EPrimitive::TriangleStrip );
 
-		// TODO
-		/*if ( isLast and _debugPixel.has_value() )
+		if ( isLast and _debugPixel.has_value() )
 		{
 			const vec2	coord = vec2{pass.viewport.x, pass.viewport.y} * (*_debugPixel) + 0.5f;
 
 			draw_task.EnableFragmentDebugTrace( int(coord.x), int(coord.y) );
 			_debugPixel.reset();
-		}*/
+		}
 
 		cmdBuffer->AddTask( pass_id, draw_task );
 

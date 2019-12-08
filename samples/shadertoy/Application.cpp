@@ -97,7 +97,7 @@ namespace FG
 
 			if ( key == "R" )		_view->Recompile();
 			if ( key == "T" )		_frameCounter = 0;
-			if ( key == "U" )		_debugPixel = GetMousePos() / vec2{GetSurfaceSize().x, GetSurfaceSize().y};
+			if ( key == "U" )		_view->DebugPixel( GetMousePos() / vec2{GetSurfaceSize().x, GetSurfaceSize().y} );
 
 			if ( key == "F" )		_freeze = not _freeze;
 			if ( key == "space" )	_pause = not _pause;

@@ -166,6 +166,8 @@ namespace FG
 		Rad						_cameraFov			= 60_deg;
 		VRCamera				_vrCamera;
 
+		Optional<vec2>			_debugPixel;
+
 		ImageCache_t			_imageCache;
 		
 		vec2					_lastMousePos;		// in unorm coords
@@ -189,6 +191,7 @@ namespace FG
 		void  SetCamera (const VRCamera &value);
 		void  SetFov (Rad value);
 		void  SetImageFormat (EPixelFormat value, uint msaa = 0);
+		void  DebugPixel (const vec2 &coord);
 
 		ND_ DrawResult_t  Draw (const CommandBuffer &cmd, uint frameId, SecondsF time, SecondsF dt);
 
