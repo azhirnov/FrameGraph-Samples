@@ -479,14 +479,14 @@ namespace FG
 					else
 						image = ImageID{ iter->second->_perEye[eye].passes[i].renderTarget.Get() };
 					
-					pass.resources.BindTexture( name, image, _linearClampSampler );	// TODO: sampler
+					pass.resources.BindTexture( name, image, samp );
 					continue;
 				}
 				
 				// find channel in loadable images
 				if ( _LoadImage( cmdBuffer, ch.name, OUT image ))
 				{
-					pass.resources.BindTexture( name, image, _linearClampSampler );
+					pass.resources.BindTexture( name, image, samp );
 					continue;
 				}
 				

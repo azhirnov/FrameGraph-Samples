@@ -74,6 +74,7 @@ namespace FG
 		void  _InitSamples ();
 		void  _OnPixelReadn (const uint2 &point, const ImageView &view);
 		void  _StartStopRecording ();
+		void  _ResetPosition ();
 	};
 
 

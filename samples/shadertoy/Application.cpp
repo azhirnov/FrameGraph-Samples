@@ -14,13 +14,22 @@ namespace FG
 */
 	void  Application::_InitSamples ()
 	{
+		_samples.push_back( Shaders::Shadertoy::SirenianDawn );
+		_samples.push_back( Shaders::Shadertoy::NovaMarble );
+		_samples.push_back( Shaders::Shadertoy::GlowCity );
 		_samples.push_back( Shaders::ShadertoyVR::Skyline );
 		_samples.push_back( Shaders::ShadertoyVR::SkylineFreeCam );
-		//_samples.push_back( Shaders::Shadertoy::Glowballs );
+		_samples.push_back( Shaders::ShadertoyVR::NightMist );
+		_samples.push_back( Shaders::ShadertoyVR::Catacombs );
+		_samples.push_back( Shaders::ShadertoyVR::DesertCanyon );
+		_samples.push_back( Shaders::ShadertoyVR::FrozenWasteland );
+		_samples.push_back( Shaders::ShadertoyVR::Apollonian );
+		_samples.push_back( Shaders::ShadertoyVR::ProteanClouds );
 
 		_samples.push_back( Shaders::My::ConvexShape2D );
-		_samples.push_back( Shaders::My::ConvexShape3D );
+		_samples.push_back( Shaders::My::OptimizedSDF );
 
+		_samples.push_back( Shaders::MyVR::ConvexShape3D );
 		_samples.push_back( Shaders::MyVR::Building_1 );
 		_samples.push_back( Shaders::MyVR::Building_2 );
 	}
@@ -70,8 +79,9 @@ namespace FG
 		_viewMode	= EViewMode::Mono;
 		_targetSize	= uint2(float2(GetSurfaceSize()) * _sufaceScale + 0.5f);
 
-		GetFPSCamera().SetPosition({ 0.0f, 0.0f, 2.0f });
-		GetVRCamera().SetHmdOffsetScale( 0.1f );
+		_ResetPosition();
+		GetFPSCamera().SetPerspective( _cameraFov, 1.0f, 0.1f, 100.0f );
+		//GetVRCamera().SetHmdOffsetScale( 0.1f );
 
 		_view->SetMode( _targetSize, _viewMode );
 		_view->SetCamera( GetFPSCamera() );
@@ -98,6 +108,7 @@ namespace FG
 			if ( key == "R" )		_view->Recompile();
 			if ( key == "T" )		_frameCounter = 0;
 			if ( key == "U" )		_view->DebugPixel( GetMousePos() / vec2{GetSurfaceSize().x, GetSurfaceSize().y} );
+			if ( key == "P" )		_ResetPosition();
 
 			if ( key == "F" )		_freeze = not _freeze;
 			if ( key == "space" )	_pause = not _pause;
@@ -302,5 +313,16 @@ namespace FG
 				CHECK( _videoRecorder->Begin( _targetSize, 60, 7552, EVideoFormat::YUV_420P, "video.mp4" ));
 		}
 	}
+	
+/*
+=================================================
+	_ResetPosition
+=================================================
+*/
+	void  Application::_ResetPosition ()
+	{
+		GetFPSCamera().SetPosition({ 0.0f, 0.0f, 0.0f });
+	}
+
 
 }	// FG

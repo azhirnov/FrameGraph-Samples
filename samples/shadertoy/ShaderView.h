@@ -195,6 +195,11 @@ namespace FG
 
 		ND_ DrawResult_t  Draw (const CommandBuffer &cmd, uint frameId, SecondsF time, SecondsF dt);
 
+		ND_ RawSamplerID  NearestClampSampler ()	const	{ return _nearestClampSampler; }
+		ND_ RawSamplerID  LinearClampSampler ()		const	{ return _linearClampSampler; }
+		ND_ RawSamplerID  NearestRepeatSampler ()	const	{ return _nearestRepeatSampler; }
+		ND_ RawSamplerID  LinearRepeatSampler ()	const	{ return _linearRepeatSampler; }
+
 
 	private:
 		void _CreateSamplers ();

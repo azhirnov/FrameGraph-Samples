@@ -8,7 +8,7 @@ To the extent possible under law, the author(s) have dedicated all copyright and
 -Otavio Good
 */
 
-#define HIGH_QUILITY 1
+#define HIGH_QUILITY 0
 
 #include "RayTracing.glsl"
 
