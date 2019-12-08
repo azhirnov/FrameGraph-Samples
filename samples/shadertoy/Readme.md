@@ -13,3 +13,10 @@
 `space` - pause rendering<br/>
 `escape` - exit<br/>
 `left mouse button` - rotate by mouse<br/>
+
+
+## Video recording
+
+Setup offline video recorder in `main.cpp`<br/>
+Supported view modes: `mono` and `VR360`.<br/>
+Use [spatial media script](https://github.com/google/spatial-media) to inject stereo metadata.<br/>

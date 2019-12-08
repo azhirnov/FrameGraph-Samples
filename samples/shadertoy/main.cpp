@@ -12,14 +12,25 @@
 int main ()
 {
 	using namespace FG;
-	
+
 #if 1
 	Application		app;
 	CHECK_ERR( app.Initialize(), -1 );
 #else
-	const uint		fps	= 60;
-	OfflineVideoApp	app{ uint2{8192, 4096}, OfflineVideoApp::EViewMode::VR360_Video, EPixelFormat::RGBA8_UNorm, fps, 360<<10 };
-	CHECK_ERR( app.Initialize( Shaders::ShadertoyVR::Skyline, 60*fps, "skyline1.mp4" ), -1 );
+
+	using EViewMode = OfflineVideoApp::EViewMode;
+
+	OfflineVideoApp::Config	cfg;
+	cfg.imageFormat		= EPixelFormat::RGBA8_UNorm;
+	cfg.imageSamples	= 8;
+	cfg.fps				= 60;
+
+	//cfg.imageSize	= uint2{1920, 1080};	cfg.viewMode = EViewMode::Mono;			cfg.bitrateKb = 12<<10;
+	//cfg.imageSize	= uint2{4096, 2048};	cfg.viewMode = EViewMode::VR180_Video;	cfg.bitrateKb = 50<<10;
+	cfg.imageSize	= uint2{4096, 2048};	cfg.viewMode = EViewMode::VR360_Video;	cfg.bitrateKb = 50<<10;
+	
+	OfflineVideoApp		app{ cfg };
+	CHECK_ERR( app.Initialize( Shaders::ShadertoyVR::Skyline, 56*cfg.fps, "skyline.mp4" ), -1 );
 #endif
 	
 	for (; app.Update(); ) {}
