@@ -17,10 +17,8 @@ namespace FG
 	constructor
 =================================================
 */
-	OfflineVideoApp::OfflineVideoApp (const uint2 &size, EViewMode mode, EPixelFormat fmt, uint fps, uint bitrateKb) :
-		_targetSize{size}, _viewMode{mode}, _imageFormat{fmt}, _fps{fps}, _bitrateKb{bitrateKb}
-	{
-	}
+	OfflineVideoApp::OfflineVideoApp (const Config &cfg) : _config{cfg}
+	{}
 	
 /*
 =================================================
@@ -28,8 +26,7 @@ namespace FG
 =================================================
 */
 	OfflineVideoApp::~OfflineVideoApp ()
-	{
-	}
+	{}
 
 /*
 =================================================
@@ -49,12 +46,12 @@ namespace FG
 
 		_view.reset( new ShaderView{_frameGraph} );
 
-		GetFPSCamera().SetPosition({ 0.0f, 0.0f, 2.0f });
+		GetFPSCamera().SetPosition({ 0.0f, 0.0f, 0.0f });
 
-		_view->SetMode( _targetSize, _viewMode );
+		_view->SetMode( _config.imageSize, _config.viewMode );
 		_view->SetCamera( GetFPSCamera() );
 		_view->SetFov( _cameraFov );
-		_view->SetImageFormat( _imageFormat );
+		_view->SetImageFormat( _config.imageFormat, _config.imageSamples );
 		
 		#if defined(FG_ENABLE_FFMPEG)
 			_videoRecorder.reset( new FFmpegVideoRecorder{} );
@@ -63,7 +60,7 @@ namespace FG
 		#endif
 
 		if ( _videoRecorder )
-			CHECK( _videoRecorder->Begin( _targetSize, _fps, _bitrateKb, EVideoFormat::YUV_420P, videoName ));
+			CHECK( _videoRecorder->Begin( _config.imageSize, _config.fps, _config.bitrateKb, EVideoFormat::YUV_420P, videoName ));
 
 		_videoName	= videoName;
 		_maxFrames	= maxFrames;
@@ -122,8 +119,8 @@ namespace FG
 		_view->SetCamera( GetFPSCamera() );
 
 		// draw
-		const SecondsF	time	{ float(_frameCounter) / _fps };
-		const SecondsF	dt		{ 1.0f / _fps };
+		const SecondsF	time	{ float(_frameCounter) / _config.fps };
+		const SecondsF	dt		{ 1.0f / _config.fps };
 
 		auto[task, image_l, image_r] = _view->Draw( cmdbuf, _frameCounter, time, dt );
 		CHECK_ERR( task and image_l );
@@ -135,7 +132,7 @@ namespace FG
 			// add video frame
 			if ( _videoRecorder )
 			{
-				cmdbuf->AddTask( ReadImage{}.SetImage( image_l, uint2(0), _targetSize )
+				cmdbuf->AddTask( ReadImage{}.SetImage( image_l, uint2(0), _config.imageSize )
 									.SetCallback( [this] (const ImageView &view)
 									{
 										if ( _videoRecorder )

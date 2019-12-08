@@ -113,12 +113,13 @@ namespace FG
 	SetImageFormat
 =================================================
 */
-	void  ShaderView::SetImageFormat (EPixelFormat value)
+	void  ShaderView::SetImageFormat (EPixelFormat value, uint msaa)
 	{
-		if ( _defaultFormat == value )
+		if ( _imageFormat == value and _imageSamples == msaa )
 			return;
 
-		_defaultFormat	 = value;
+		_imageFormat	 = value;
+		_imageSamples	 = msaa;
 		_recreateShaders = true;
 	}
 
@@ -249,7 +250,7 @@ namespace FG
 
 
 		LogicalPassID	pass_id = cmdBuffer->CreateRenderPass( RenderPassDesc( view_size )
-										.AddTarget( RenderTargetID::Color_0, pass.renderTarget, EAttachmentLoadOp::Load, EAttachmentStoreOp::Store )
+										.AddTarget( RenderTargetID::Color_0, pass.renderTargetMS ? pass.renderTargetMS : pass.renderTarget, EAttachmentLoadOp::Load, EAttachmentStoreOp::Store )
 										.AddViewport( view_size ));
 
 		DrawVertices	draw_task;
@@ -273,6 +274,13 @@ namespace FG
 		cmdBuffer->AddTask( pass_id, draw_task );
 
 		_currTask = cmdBuffer->AddTask( SubmitRenderPass{ pass_id }.DependsOn( _currTask ));
+
+		if ( pass.renderTargetMS )
+		{
+			_currTask = cmdBuffer->AddTask( ResolveImage{}.From( pass.renderTargetMS ).To( pass.renderTarget )
+											.AddRegion( Default, int2{}, Default, int2{}, view_size )
+											.DependsOn( _currTask ));
+		}
 		return true;
 	}
 	
@@ -392,15 +400,24 @@ namespace FG
 			ImageDesc		desc;
 			desc.imageType	= EImage::Tex2D;
 			desc.dimension	= uint3{ pass.viewport, 1 };
-			desc.format		= shader->_format.value_or( _defaultFormat );
-			desc.usage		= EImageUsage::TransferSrc | EImageUsage::Sampled | EImageUsage::ColorAttachment;
+			desc.format		= shader->_format.value_or( _imageFormat );
+			desc.usage		= EImageUsage::Transfer | EImageUsage::Sampled | EImageUsage::ColorAttachment;
 
 			EResourceState	def_state	= is_vr ? EResourceState::TransferSrc : EResourceState::Unknown;
 			const String	name		= String(shader->Name()) << "-RT-" << ToString(Distance( eye_data.passes.data(), &pass ))
 											<< (is_vr ? (shader->_perEye.data() == &eye_data ? "-left" : "-right") : "");
-
+			
 			pass.renderTarget = _frameGraph->CreateImage( desc, Default, def_state, name );
 			CHECK_ERR( pass.renderTarget );
+
+			if ( _imageSamples > 1 )
+			{
+				desc.imageType	= EImage::Tex2DMS;
+				desc.samples	= MultiSamples{ _imageSamples };
+
+				pass.renderTargetMS = _frameGraph->CreateImage( desc, Default, def_state, name );
+				CHECK_ERR( pass.renderTargetMS );
+			}
 		}
 		
 		// create uniform buffers
@@ -438,9 +455,10 @@ namespace FG
 
 			for (size_t j = 0; j < shader->_channels.size(); ++j)
 			{
-				auto&		ch		= shader->_channels[j];
-				auto&		image	= pass.images[j];
-				UniformID	name	{"iChannel"s << ToString(j)};
+				auto&			ch		= shader->_channels[j];
+				auto&			image	= pass.images[j];
+				UniformID		name	{"iChannel"s << ToString(j)};
+				RawSamplerID	samp	= ch.samp ? ch.samp : _linearClampSampler.Get();
 
 				// find channel in shader passes
 				ShadersMap_t::iterator	iter = _shaders.find( ch.name );
@@ -489,6 +507,7 @@ namespace FG
 		{
 			for (auto& pass : eye_data.passes)
 			{
+				_frameGraph->ReleaseResource( INOUT pass.renderTargetMS );
 				_frameGraph->ReleaseResource( INOUT pass.renderTarget );
 			
 				for (auto& img : pass.images)
@@ -549,11 +568,12 @@ namespace FG
 
 				void main ()
 				{
-					vec2 uv    = gl_FragCoord.xy / iResolution.xy;
+					vec2 coord = gl_FragCoord.xy + gl_SamplePosition;
+					vec2 uv    = coord / iResolution.xy;
 					vec3 dir   = mix( mix( iCameraFrustumLB, iCameraFrustumRB, uv.x ),
 									  mix( iCameraFrustumLT, iCameraFrustumRT, uv.x ),
 									  uv.y );
-					mainVR( out_Color, gl_FragCoord.xy, iCameraPos, dir );
+					mainVR( out_Color, coord, iCameraPos, dir );
 				}
 
 			#elif (VR_MODE == 180) || (VR_MODE == 360)
@@ -562,7 +582,8 @@ namespace FG
 				void main ()
 				{
 					// from https://developers.google.com/vr/jump/rendering-ods-content.pdf
-					vec2	uv		= gl_FragCoord.xy / iResolution.xy;
+					vec2	coord	= gl_FragCoord.xy + gl_SamplePosition;
+					vec2	uv		= coord / iResolution.xy;
 					float	pi		= 3.14159265358979323846f;
 					float	IPD		= 64.0e-4;	// (m) Interpupillary distance, the distance between the eyes.
 
@@ -580,7 +601,7 @@ namespace FG
 					vec3	origin	= vec3(cos(theta), 0.0, sin(theta)) * scale;
 					vec3	dir		= vec3(sin(theta) * cos(phi), sin(phi), -cos(theta) * cos(phi));
 
-					mainVR( out_Color, gl_FragCoord.xy, iCameraPos + origin, dir );
+					mainVR( out_Color, coord, iCameraPos + origin, dir );
 				}
 
 			#else
@@ -588,7 +609,7 @@ namespace FG
 
 				void main ()
 				{
-					vec2 coord = gl_FragCoord.xy;
+					vec2 coord = gl_FragCoord.xy + gl_SamplePosition;
 					coord.y = iResolution.y - coord.y - 1.0;
 
 					mainImage( out_Color, coord );

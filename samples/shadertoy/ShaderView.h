@@ -92,6 +92,7 @@ namespace FG
 
 			struct PerPass {
 				PipelineResources	resources;
+				ImageID				renderTargetMS;
 				ImageID				renderTarget;
 				uint2				viewport;
 				ChannelImages_t		images;
@@ -144,7 +145,8 @@ namespace FG
 
 		uint2					_viewSize;
 		EViewMode				_viewMode			= EViewMode::Mono;
-		EPixelFormat			_defaultFormat		= EPixelFormat::RGBA8_UNorm;
+		EPixelFormat			_imageFormat		= EPixelFormat::RGBA8_UNorm;
+		uint					_imageSamples		= 1;
 		uint					_passIdx : 1;
 		bool					_recreateShaders	= false;
 
@@ -186,7 +188,7 @@ namespace FG
 		void  SetCamera (const FPSCamera &value);
 		void  SetCamera (const VRCamera &value);
 		void  SetFov (Rad value);
-		void  SetImageFormat (EPixelFormat value);
+		void  SetImageFormat (EPixelFormat value, uint msaa = 0);
 
 		ND_ DrawResult_t  Draw (const CommandBuffer &cmd, uint frameId, SecondsF time, SecondsF dt);
 

@@ -20,16 +20,22 @@ namespace FG
 		using ShaderDescr	= ShaderView::ShaderDescr;
 		using Shader_t		= std::function< void (Ptr<ShaderView> sv) >;
 
+		struct Config
+		{
+			uint2				imageSize		= uint2{1920, 1080};
+			EViewMode			viewMode		= EViewMode::Mono;
+			EPixelFormat		imageFormat		= EPixelFormat::RGBA8_UNorm;
+			uint				imageSamples	= 1;
+			uint				fps				= 30;
+			uint				bitrateKb		= 10<<10;
+		};
+
 
 	// variables
 	private:
 		UniquePtr<ShaderView>	_view;
 		
-		const uint2				_targetSize;
-		const EViewMode			_viewMode;
-		const EPixelFormat		_imageFormat;
-		const uint				_fps;
-		const uint				_bitrateKb;
+		const Config			_config;
 		
 		uint					_frameCounter	= 0;
 		uint					_maxFrames		= 0;
@@ -45,7 +51,7 @@ namespace FG
 
 	// methods
 	public:
-		OfflineVideoApp (const uint2 &size, EViewMode mode, EPixelFormat fmt, uint fps, uint bitrateKb);
+		explicit OfflineVideoApp (const Config &cfg);
 		~OfflineVideoApp ();
 		
 		bool  Initialize (Shader_t shader, uint maxFrames, StringView videoName);
