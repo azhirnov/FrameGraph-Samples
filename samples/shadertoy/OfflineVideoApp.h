@@ -27,7 +27,7 @@ namespace FG
 			EPixelFormat		imageFormat		= EPixelFormat::RGBA8_UNorm;
 			uint				imageSamples	= 1;
 			uint				fps				= 30;
-			uint				bitrateKb		= 10<<10;
+			uint64_t			bitrate			= 10ull << 20;
 		};
 
 

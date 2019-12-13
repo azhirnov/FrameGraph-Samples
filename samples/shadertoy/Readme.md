@@ -15,11 +15,12 @@
 `left mouse button` - rotate by mouse<br/>
 
 
+## VR Controls
+Use left or right dpad to move.
+
+
 ## Video recording
 
 Setup offline video recorder in `main.cpp`<br/>
 Supported view modes: `mono` and `VR360`.<br/>
 Use [spatial media script](https://github.com/google/spatial-media) to inject stereo metadata.<br/>
-<br/>
-VR360 video in 8k:<br/>
-[![Video](http://img.youtube.com/vi/5cG952QEyEk/0.jpg)](https://www.youtube.com/watch?v=5cG952QEyEk&list=PLD8sxny2_tajeEBjFDuXvn6_q1YWi0xyn)

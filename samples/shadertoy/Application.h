@@ -47,7 +47,7 @@ namespace FG
 		
 		static inline const Rad			_cameraFov		= 60_deg;
 		static inline const float		_sufaceScale	= 0.5f;
-		static constexpr EPixelFormat	_imageFormat	= EPixelFormat::RGBA16F;
+		static constexpr EPixelFormat	_imageFormat	= EPixelFormat::RGBA8_UNorm;
 
 
 	// methods

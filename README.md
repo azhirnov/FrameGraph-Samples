@@ -27,6 +27,7 @@ used glTF Sponza from https://github.com/KhronosGroup/glTF-Sample-Models/tree/ma
 Some shaders from [Shadertoy](https://www.shadertoy.com).
 - [x] Manual camera
 - [x] VR
+- [x] Offline renderer
 
 
 ## Vulkan samples

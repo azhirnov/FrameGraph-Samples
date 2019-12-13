@@ -6,6 +6,8 @@
 
 namespace FG
 {
+	static constexpr float	DefaultIPD	= 64.0e-3f;
+
 
 	//
 	// Shader View
@@ -19,8 +21,9 @@ namespace FG
 		{
 			Mono		= 0,
 			HMD_VR		= 1,
-			VR180_Video	= 180,
-			VR360_Video	= 360,
+			Mono360		= 3601,
+			VR180_Video	= 1802,
+			VR360_Video	= 3602,
 		};
 
 		static constexpr uint	MaxChannels	= 4;
@@ -32,6 +35,7 @@ namespace FG
 				String			name;
 				uint			index	= UMax;
 				RawSamplerID	samp;
+				bool			flipY	= false;
 			};
 			using Channels_t = FixedArray< Channel, MaxChannels >;
 			
@@ -43,15 +47,18 @@ namespace FG
 			Optional<uint2>			_surfaceSize;
 			Optional<EPixelFormat>	_format;
 			RawSamplerID			_sampler;
+			float					_ipd		= DefaultIPD;	// (m) Interpupillary distance, the distance between the eyes.
 
 		// methods
 			ShaderDescr () {}
-			ShaderDescr&  Pipeline (String &&file, String &&def = "")               	{ _pplnFilename = std::move(file);  _pplnDefines = std::move(def);  return *this; }
-			ShaderDescr&  InChannel (const String &name, uint index, RawSamplerID samp)	{ _channels.push_back({ name, index, samp });  return *this; }
-			ShaderDescr&  InChannel (const String &name, uint index)					{ _channels.push_back({ name, index, {} });  return *this; }
-			ShaderDescr&  SetScale (float value)										{ _surfaceScale = value;  return *this; }
-			ShaderDescr&  SetDimension (uint2 value)									{ _surfaceSize = value;  return *this; }
-			ShaderDescr&  SetFormat (EPixelFormat value)								{ _format = value;  return *this; }
+			ShaderDescr&  Pipeline (String &&file, String &&def = "")	{ _pplnFilename = std::move(file);  _pplnDefines = std::move(def);  return *this; }
+			ShaderDescr&  SetScale (float value)						{ _surfaceScale = value;  return *this; }
+			ShaderDescr&  SetDimension (uint2 value)					{ _surfaceSize = value;  return *this; }
+			ShaderDescr&  SetFormat (EPixelFormat value)				{ _format = value;  return *this; }
+			
+			ShaderDescr&  InChannel (const String &name, uint index, RawSamplerID samp = {}, bool flipY = false) {
+				_channels.push_back({ name, index, samp, flipY });  return *this;
+			}
 		};
 
 
@@ -69,7 +76,7 @@ namespace FG
 			vec4		iMouse;					// offset: 160, align: 16	// mouse pixel coords. xy: current (if MLB down), zw: click
 			vec4		iDate;					// offset: 176, align: 16	// (year, month, day, time in seconds)
 			float		iSampleRate;			// offset: 192, align: 4	// sound sample rate (i.e., 44100)
-			float		_padding1;
+			float		iCameraIPD;				// offset: 196, align: 4	// (m) Interpupillary distance, the distance between the eyes.
 			float		_padding2;
 			float		_padding3;
 			vec3		iCameraFrustumRayLB;	// offset: 208, align: 16	// left bottom - frustum rays
@@ -110,6 +117,7 @@ namespace FG
 		// variables
 			struct {
 				GPipelineID				mono;
+				GPipelineID				mono360;
 				GPipelineID				hmdVR;
 				GPipelineID				vr180;
 				GPipelineID				vr360;
@@ -122,6 +130,7 @@ namespace FG
 			Optional<float>			_surfaceScale;
 			Optional<uint2>			_surfaceSize;
 			Optional<EPixelFormat>	_format;
+			float					_ipd;
 
 		// methods
 			explicit Shader (StringView name, ShaderDescr &&desc);
@@ -160,6 +169,8 @@ namespace FG
 		SamplerID				_linearClampSampler;
 		SamplerID				_nearestRepeatSampler;
 		SamplerID				_linearRepeatSampler;
+		SamplerID				_mipmapClampSampler;
+		SamplerID				_mipmapRepeatSampler;
 		
 		// camera
 		FPSCamera				_camera;
@@ -199,6 +210,8 @@ namespace FG
 		ND_ RawSamplerID  LinearClampSampler ()		const	{ return _linearClampSampler; }
 		ND_ RawSamplerID  NearestRepeatSampler ()	const	{ return _nearestRepeatSampler; }
 		ND_ RawSamplerID  LinearRepeatSampler ()	const	{ return _linearRepeatSampler; }
+		ND_ RawSamplerID  MipmapClampSampler ()		const	{ return _mipmapClampSampler; }
+		ND_ RawSamplerID  MipmapRepeatSampler ()	const	{ return _mipmapRepeatSampler; }
 
 
 	private:
@@ -210,7 +223,7 @@ namespace FG
 		bool _DrawWithShader (const CommandBuffer &cmd, const ShaderPtr &shader, uint eye, uint passIndex, bool isLast);
 		void _UpdateShaderData (uint frameId, SecondsF time, SecondsF dt);
 
-		bool _LoadImage (const CommandBuffer &cmd, const String &filename, OUT ImageID &id);
+		bool _LoadImage (const CommandBuffer &cmd, const String &filename, bool flipY, OUT ImageID &id);
 		bool _HasImage (StringView filename) const;
 
 		GPipelineID  _Compile (StringView name, StringView defs) const;

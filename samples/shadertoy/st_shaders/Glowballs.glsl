@@ -141,6 +141,10 @@ float nrand(in vec2 n) {
 	return fract(sin(dot(n.xy, vec2(12.9898, 78.233)))* 43758.5453);
 }
 
+vec3 trand(in vec2 n) {
+    return texture(iChannel0, n).rgb;
+}
+
 vec4 traceScene(in Camera cam, vec2 seed, float lastB) {
     vec3 startPos = cam.pos;
     
@@ -220,7 +224,7 @@ vec4 traceScene(in Camera cam, vec2 seed, float lastB) {
 // uv = fragment position (-1..1) and fov is >0 (<1 is telephoto, 1 is standard, 2 is fisheye-like)
 Camera setupCam(in vec3 pos, in vec3 target, in float fov, in vec2 uv) {
 		// cam setup
-    vec2 mouse = iMouse.xy / iResolution.xy;
+    vec2 mouse = vec2(0.0); //iMouse.xy / iResolution.xy;
     mouse = mouse * 2. - 0.5;
     pos -= target;
     R(pos.xz, mouse.x*0.5);// + sin(t*0.05));
@@ -258,10 +262,8 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
     t = iTime;
 	vec2 uv = fragCoord.xy / iResolution.xy;
-	uv.y = 1.0 - uv.y;
-    vec4 l = texture(iChannel0, uv);
-
-    uv = (fragCoord.xy / iResolution.xy) * 2. - 1.;
+    vec4 l = texture(iChannel0, vec2(uv.x, 1.0-uv.y));
+    uv = uv * 2. - 1.;
     uv.y /= iResolution.x/iResolution.y;
     Camera cam = setupCam(vec3(0,3,-8), vec3(4,5,4), 1.0, uv);
         //Camera(vec3(0, 5, -10), normalize(vec3(uv, 1.0)));
@@ -269,5 +271,5 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     float lastB = max(l.x, max(l.y, l.z));
     lastB = pow(lastB, 0.25);
     vec4 c = traceScene(cam, uv + iTime, max(0.3,1.-lastB));
-    fragColor = mix(c, l, iMouse.z > 0.5 || iFrame == 0 ? 0.5 : 0.98);
+    fragColor = mix(c, l, iFrame == 0 ? 0.5 : 0.98);
 }

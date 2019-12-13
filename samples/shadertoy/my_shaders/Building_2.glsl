@@ -120,7 +120,7 @@ void mainVR (out float4 fragColor, in float2 fragCoord, in float3 fragRayOri, in
 	fragColor = RayTrace( ray );
 }
 
-void mainImage( out float4 fragColor, in float2 fragCoord )
+void mainImage (out float4 fragColor, in float2 fragCoord)
 {
 	Ray	ray = Ray_From( iCameraFrustumLB, iCameraFrustumRB, iCameraFrustumLT, iCameraFrustumRT,
 						iCameraPos, 0.1, fragCoord / iResolution.xy );

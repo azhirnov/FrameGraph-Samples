@@ -20,35 +20,35 @@ vec4 orb;
 
 float map( vec3 p, float s )
 {
-	float scale = 1.0;
+    float scale = 1.0;
 
-	orb = vec4(1000.0); 
-	
-	for( int i=0; i<8;i++ )
-	{
-		p = -1.0 + 2.0*fract(0.5*p+0.5);
+    orb = vec4(1000.0); 
+    
+    for( int i=0; i<8;i++ )
+    {
+        p = -1.0 + 2.0*fract(0.5*p+0.5);
 
-		float r2 = dot(p,p);
-		
+        float r2 = dot(p,p);
+        
         orb = min( orb, vec4(abs(p),r2) );
-		
-		float k = s/r2;
-		p     *= k;
-		scale *= k;
-	}
-	
-	return 0.25*abs(p.y)/scale;
+        
+        float k = s/r2;
+        p     *= k;
+        scale *= k;
+    }
+    
+    return 0.25*abs(p.y)/scale;
 }
 
 float trace( in vec3 ro, in vec3 rd, float s )
 {
-	float maxd = 30.0;
+    float maxd = 30.0;
     float t = 0.01;
     for( int i=0; i<200; i++ )
     {
-	    float precis = 0.001 * t;
+        float precis = 0.001 * t;
         
-	    float h = map( ro+rd*t, s );
+        float h = map( ro+rd*t, s );
         if( h<precis||t>maxd ) break;
         t += h;
     }
@@ -63,8 +63,8 @@ vec3 calcNormal( in vec3 pos, in float t, in float s )
 
     vec2 e = vec2(1.0,-1.0)*precis;
     return normalize( e.xyy*map( pos + e.xyy, s ) + 
-					  e.yyx*map( pos + e.yyx, s ) + 
-					  e.yxy*map( pos + e.yxy, s ) + 
+                      e.yyx*map( pos + e.yyx, s ) + 
+                      e.yxy*map( pos + e.yxy, s ) + 
                       e.xxx*map( pos + e.xxx, s ) );
 }
 
@@ -117,15 +117,15 @@ vec4 RayTrace (const Ray ray)
 
 void mainVR (out float4 fragColor, in float2 fragCoord, in float3 fragRayOri, in float3 fragRayDir)
 {
-	Ray	ray = Ray_Create( fragRayOri, fragRayDir, 0.1 );
+    Ray	ray = Ray_Create( fragRayOri, fragRayDir, 0.1 );
 
-	fragColor = RayTrace( ray );
+    fragColor = RayTrace( ray );
 }
 
-void mainImage( out float4 fragColor, in float2 fragCoord )
+void mainImage (out float4 fragColor, in float2 fragCoord)
 {
-	Ray	ray = Ray_From( iCameraFrustumLB, iCameraFrustumRB, iCameraFrustumLT, iCameraFrustumRT,
-						iCameraPos, 0.1, fragCoord / iResolution.xy );
+    Ray	ray = Ray_From( iCameraFrustumLB, iCameraFrustumRB, iCameraFrustumLT, iCameraFrustumRT,
+                        iCameraPos, 0.1, fragCoord / iResolution.xy );
 
-	fragColor = RayTrace( ray );
+    fragColor = RayTrace( ray );
 }

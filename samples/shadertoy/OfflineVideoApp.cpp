@@ -38,8 +38,8 @@ namespace FG
 		{
 			AppConfig	cfg;
 			cfg.surfaceSize			= uint2(1024, 768);
-			cfg.windowTitle			= "Shadertoy";
-			cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib" };
+			cfg.windowTitle			= "Offline Renderer";
+			cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib", FG_DATA_PATH };
 			//cfg.enableDebugLayers	= false;
 			CHECK_ERR( _CreateFrameGraph( cfg ));
 		}
@@ -60,7 +60,18 @@ namespace FG
 		#endif
 
 		if ( _videoRecorder )
-			CHECK( _videoRecorder->Begin( _config.imageSize, _config.fps, _config.bitrateKb, EVideoFormat::YUV_420P, videoName ));
+		{
+			IVideoRecorder::Config		cfg;
+			cfg.format		= EVideoFormat::YUV_420P;
+			cfg.codec		= EVideoCodec::H264;
+			cfg.preferGPU	= true;
+			cfg.preset		= EVideoPreset::Slow;
+			cfg.bitrate		= _config.bitrate;
+			cfg.fps			= _config.fps;
+			cfg.size		= _config.imageSize;
+
+			CHECK( _videoRecorder->Begin( cfg, videoName ));
+		}
 
 		_videoName	= videoName;
 		_maxFrames	= maxFrames;
@@ -149,10 +160,6 @@ namespace FG
 		}
 
 		_SetLastCommandBuffer( cmdbuf );
-		
-		// to prevent overheating
-		_frameGraph->WaitIdle();
-		std::this_thread::sleep_for(SecondsF{0.1f});
 
 		return true;
 	}

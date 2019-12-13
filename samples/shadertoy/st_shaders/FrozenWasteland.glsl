@@ -346,8 +346,8 @@ vec4 RayTrace (const Ray ray, const vec2 fragCoord)
     
     
     // Borders...
-    float f = smoothstep(0.0, 3.0, iTime)*.5;
-    col *= f+f*pow(70. *q.x*q.y*(1.0-q.x)*(1.0-q.y), .2);
+    //float f = smoothstep(0.0, 3.0, iTime)*.5;
+    //col *= f+f*pow(70. *q.x*q.y*(1.0-q.x)*(1.0-q.y), .2);
     
     return vec4( col, 1.0 );
 }
@@ -361,7 +361,7 @@ void mainVR (out float4 fragColor, in float2 fragCoord, in float3 fragRayOri, in
     fragColor = RayTrace( ray, fragCoord );
 }
 
-void mainImage( out float4 fragColor, in float2 fragCoord )
+void mainImage (out float4 fragColor, in float2 fragCoord)
 {
     Ray	ray = Ray_From( iCameraFrustumLB, iCameraFrustumRB, iCameraFrustumLT, iCameraFrustumRT,
                         iCameraPos, 0.1, fragCoord / iResolution.xy );

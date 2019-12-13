@@ -1,50 +1,48 @@
 // from https://www.shadertoy.com/view/Xs33Df
 /*
-    Desert Canyon
-    -------------
+	Desert Canyon
+	-------------
 
-    Just a simple canyon fly through. Since the laws of physics aren't adhered to (damn stray floating 
-    rocks), you can safely assume the setting is a dry, rocky desert on a different planet... in an 
-    alternate reality. :)
+	Just a simple canyon fly through. Since the laws of physics aren't adhered to (damn stray floating 
+	rocks), you can safely assume the setting is a dry, rocky desert on a different planet... in an 
+	alternate reality. :)
 
-    I thought I'd do a daytime scene for a change. I like the way they look, but I find they require
-    more effort to light up correctly. In this particular example, I had to find the balance between
-    indoor and outdoor lighting, but keep it simple enough to allow reasonable frame rates for swift 
-    camera movement. For that reason, I was really thankful to have some of Dave Hoskins's and IQ's 
-    examples to refer to.
+	I thought I'd do a daytime scene for a change. I like the way they look, but I find they require
+	more effort to light up correctly. In this particular example, I had to find the balance between
+	indoor and outdoor lighting, but keep it simple enough to allow reasonable frame rates for swift 
+	camera movement. For that reason, I was really thankful to have some of Dave Hoskins's and IQ's 
+	examples to refer to.
 
-    The inspiration for this particular scene came from Dr2's flyby examples. This is obviously less
-    complicated, since his involve flybys with actual planes. Really cool, if you've never seen them.
+	The inspiration for this particular scene came from Dr2's flyby examples. This is obviously less
+	complicated, since his involve flybys with actual planes. Really cool, if you've never seen them.
 
-    Anyway, I'll put up a more interesting one at a later date.
-    
+	Anyway, I'll put up a more interesting one at a later date.
+	
 
-    Outdoor terrain shaders:
+	Outdoor terrain shaders:
 
-    Elevated - iq
-    https://www.shadertoy.com/view/MdX3Rr
-    Based on his (RGBA's) famous demo, Elevated.
-    http://www.pouet.net/prod.php?which=52938
+	Elevated - iq
+	https://www.shadertoy.com/view/MdX3Rr
+	Based on his (RGBA's) famous demo, Elevated.
+	http://www.pouet.net/prod.php?which=52938
 
-    // How a canyon's really done. :)
-    Canyon - iq
-    https://www.shadertoy.com/view/MdBGzG
+	// How a canyon's really done. :)
+	Canyon - iq
+	https://www.shadertoy.com/view/MdBGzG
 
-    // Too many good ones to choose from, but here's one.
-    // Mountains - Dave_Hoskins
-    https://www.shadertoy.com/view/4slGD4
+	// Too many good ones to choose from, but here's one.
+	// Mountains - Dave_Hoskins
+	https://www.shadertoy.com/view/4slGD4
 
-    // Awesome.
+	// Awesome.
     River Flight - Dr2
     https://www.shadertoy.com/view/4sSXDG
 
 */
 
-#include "RayTracing.glsl"
-
 // The far plane. I'd like this to be larger, but the extra iterations required to render the 
 // additional scenery starts to slow things down on my slower machine.
-#define FAR 100.
+#define FAR 65.
 
 // Frequencies and amplitudes of the "path" function, used to shape the tunnel and guide the camera.
 const float freqA = .15/3.75;
@@ -103,12 +101,12 @@ float map(in vec3 p){
     q = sin(p*.5 + h);
     h = q.x*q.y*q.z;
   
-    // Producing a single winding tunnel. If you're not familiar with the process, this is it.
+	// Producing a single winding tunnel. If you're not familiar with the process, this is it.
     // We're also adding some detailing to the walls via "h" and the rocky "tx" value.
     p.xy -= path(p.z);
     float tnl = 1.5 - length(p.xy*vec2(.33, .66)) + h + (1. - tx)*.25;
 
-    // Smoothly combine the terrain with the tunnel - using a smooth maximum - then add some
+	// Smoothly combine the terrain with the tunnel - using a smooth maximum - then add some
     // detailing. I've also added a portion of the tunnel term onto the end, just because
     // I liked the way it looked more. 
     return smaxP(d, tnl, 2.) - tx*.5 + tnl*.8; 
@@ -137,9 +135,7 @@ float logBisectTrace(in vec3 ro, in vec3 rd){
     float d = map(rd*t + ro);
     float sgn = sign(d);
 
-    const int maxIter = 256;
-
-    for (int i=0; i < maxIter; i++){
+    for (int i=0; i<96; i++){
 
         // If the threshold is crossed with no detection, use the bisection method.
         // Also, break for the usual reasons. Note that there's only one "break"
@@ -192,8 +188,8 @@ float logBisectTrace(in vec3 ro, in vec3 rd){
 vec3 normal(in vec3 p)
 {  
     vec2 e = vec2(-1, 1)*.001;   
-    return normalize(e.yxx*map(p + e.yxx) + e.xxy*map(p + e.xxy) + 
-                     e.xyx*map(p + e.xyx) + e.yyy*map(p + e.yyy) );   
+	return normalize(e.yxx*map(p + e.yxx) + e.xxy*map(p + e.xxy) + 
+					 e.xyx*map(p + e.xyx) + e.yyy*map(p + e.yyy) );   
 }
 
 
@@ -204,7 +200,7 @@ vec3 tex3D( sampler2D tex, in vec3 p, in vec3 n ){
     n = max(n*n, .001);
     n /= (n.x + n.y + n.z );  
     
-    return (texture(tex, p.yz)*n.x + texture(tex, p.zx)*n.y + texture(tex, p.xy)*n.z).xyz;
+	return (texture(tex, p.yz)*n.x + texture(tex, p.zx)*n.y + texture(tex, p.xy)*n.z).xyz;
 }
 
 
@@ -221,7 +217,7 @@ vec3 doBumpMap( sampler2D tex, in vec3 p, in vec3 nor, float bumpfactor){
     grad -= nor*dot(nor, grad);          
                       
     return normalize(nor + grad*bumpfactor);
-    
+	
 }
 
 // The iterations should be higher for proper accuracy, but in this case, I wanted less accuracy, just to leave
@@ -232,7 +228,7 @@ float softShadow(in vec3 ro, in vec3 rd, in float start, in float end, in float 
     float shade = 1.;
     // Increase this and the shadows will be more accurate, but the wispy light trails in the caves will disappear.
     // Plus more iterations slow things down, so it works out, in this case.
-    const int maxIterationsShad = 64; 
+    const int maxIterationsShad = 10; 
 
     // The "start" value, or minimum, should be set to something more than the stop-threshold, so as to avoid a collision with 
     // the surface the ray is setting out from. It doesn't matter how many times I write shadow code, I always seem to forget this.
@@ -281,16 +277,16 @@ float softShadow(in vec3 ro, in vec3 rd, in float start, in float end, in float 
 // Alien Cocoons - https://www.shadertoy.com/view/MsdGz2
 float calculateAO( in vec3 p, in vec3 n, float maxDist )
 {
-    float ao = 0., l;
-    const float nbIte = 16.;
-    //const float falloff = .9;
+	float ao = 0., l;
+	const float nbIte = 6.;
+	//const float falloff = .9;
     for(float i=1.; i< nbIte+.5; i++){
     
         l = (i + hash(i))*.5/nbIte*maxDist;
         
         ao += (l - map( p + n*l))/(1. + l);// / pow(1.+l, falloff);
     }
-    
+	
     return clamp(1. - ao/nbIte, 0., 1.);
 }
 
@@ -298,16 +294,16 @@ float calculateAO( in vec3 p, in vec3 n, float maxDist )
 float noise3D(in vec3 p){
     
     // Just some random figures, analogous to stride. You can change this, if you want.
-    const vec3 s = vec3(7, 157, 113);
-    
-    vec3 ip = floor(p); // Unique unit cell ID.
+	const vec3 s = vec3(7, 157, 113);
+	
+	vec3 ip = floor(p); // Unique unit cell ID.
     
     // Setting up the stride vector for randomization and interpolation, kind of. 
     // All kinds of shortcuts are taken here. Refer to IQ's original formula.
     vec4 h = vec4(0., s.yz, s.y + s.z) + dot(ip, s);
     
-    p -= ip; // Cell's fractional component.
-    
+	p -= ip; // Cell's fractional component.
+	
     // A bit of cubic smoothing, to give the noise that rounded look.
     p = p*p*(3. - 2.*p);
     
@@ -315,13 +311,13 @@ float noise3D(in vec3 p){
     // then interpolating along X. There are countless ways to randomize, but this is
     // the way most are familar with: fract(sin(x)*largeNumber).
     h = mix(fract(sin(h)*43758.5453), fract(sin(h + s.x)*43758.5453), p.x);
-    
+	
     // Interpolating along Y.
     h.xy = mix(h.xz, h.yw, p.y);
     
     // Interpolating along Z, and returning the 3D noise value.
     return mix(h.x, h.y, p.z); // Range: [0, 1].
-    
+	
 }
 
 // Simple fBm to produce some clouds.
@@ -336,31 +332,31 @@ float fbm(in vec3 p){
 // Pretty standard way to make a sky. 
 vec3 getSky(in vec3 ro, in vec3 rd, vec3 sunDir){
 
-    
-    float sun = max(dot(rd, sunDir), 0.); // Sun strength.
-    float horiz = pow(1.0-max(rd.y, 0.), 3.)*.35; // Horizon strength.
-    
-    // The blueish sky color. Tinging the sky redish around the sun. 		
-    vec3 col = mix(vec3(.25, .35, .5), vec3(.4, .375, .35), sun*.75);//.zyx;
+	
+	float sun = max(dot(rd, sunDir), 0.); // Sun strength.
+	float horiz = pow(1.0-max(rd.y, 0.), 3.)*.35; // Horizon strength.
+	
+	// The blueish sky color. Tinging the sky redish around the sun. 		
+	vec3 col = mix(vec3(.25, .35, .5), vec3(.4, .375, .35), sun*.75);//.zyx;
     // Mixing in the sun color near the horizon.
-    col = mix(col, vec3(1, .9, .7), horiz);
+	col = mix(col, vec3(1, .9, .7), horiz);
     
     // Sun. I can thank IQ for this tidbit. Producing the sun with three
     // layers, rather than just the one. Much better.
-    col += .25*vec3(1, .7, .4)*pow(sun, 5.);
-    col += .25*vec3(1, .8, .6)*pow(sun, 64.);
-    col += .2*vec3(1, .9, .7)*max(pow(sun, 512.), .3);
+	col += .25*vec3(1, .7, .4)*pow(sun, 5.);
+	col += .25*vec3(1, .8, .6)*pow(sun, 64.);
+	col += .2*vec3(1, .9, .7)*max(pow(sun, 512.), .3);
     
     // Add a touch of speckle, to match up with the slightly speckly ground.
     col = clamp(col + hash(rd)*.05 - .025, 0., 1.);
-    
-    // Clouds. Render some 3D clouds far off in the distance. I've made them sparse and wispy,
+	
+	// Clouds. Render some 3D clouds far off in the distance. I've made them sparse and wispy,
     // since we're in the desert, and all that.
-    vec3 sc = ro + rd*FAR*100.; sc.y *= 3.;
+	vec3 sc = ro + rd*FAR*100.; sc.y *= 3.;
     
     // Mix the sky with the clouds, whilst fading out a little toward the horizon (The rd.y bit).
-    return mix( col, vec3(1, .95, 1), .5*smoothstep(.5, 1., fbm(.001*sc)) * clamp(rd.y*4., 0., 1.) );
-    
+	return mix( col, vec3(1, .95, 1), .5*smoothstep(.5, 1., fbm(.001*sc)) * clamp(rd.y*4., 0., 1.) );
+	
 
 }
 
@@ -388,37 +384,54 @@ float curve(in vec3 p){
 }
 
 
-vec4 RayTrace (in Ray ray, in vec2 fragCoord)
-{
-#if 1
-    // Camera Setup.
-    vec3 lookAt = vec3(0, 0, iTime*8.);  // "Look At" position.
-    vec3 ro = lookAt + vec3(0, 0, -.25); // Camera position, doubling as the ray origin.
- 
-    // Using the Z-value to perturb the XY-plane.
-    // Sending the camera and "look at" vectors down the tunnel. The "path" function is 
-    // synchronized with the distance function.
-    lookAt.xy += path(lookAt.z);
-    ro.xy += path(ro.z);
-    Ray_SetOrigin( INOUT ray, ro );
+#include "RayTracing.glsl"
 
-#else
-    Ray_SetOrigin( INOUT ray, ray.origin + vec3(0.0, 5.0, 0.0) );
+vec4 RayTrace (const Ray ray, const vec2 fragCoord)
+{
+	// Screen coordinates.
+	vec2 u = (fragCoord - iResolution.xy*.5)/iResolution.y;
+	
+	// Camera Setup.
+	vec3 lookAt = vec3(0, 0, iTime*8.);  // "Look At" position.
+	vec3 ro = lookAt + vec3(0, 0, -.25); // Camera position, doubling as the ray origin.
+ 
+	// Using the Z-value to perturb the XY-plane.
+	// Sending the camera and "look at" vectors down the tunnel. The "path" function is 
+	// synchronized with the distance function.
+	lookAt.xy += path(lookAt.z);
+	ro.xy += path(ro.z);
+
+    // Using the above to produce the unit ray-direction vector.
+    float FOV = 3.14159/3.; // FOV - Field of view.
+    vec3 forward = normalize(lookAt - ro);
+    vec3 right = normalize(vec3(forward.z, 0, -forward.x )); 
+    vec3 up = cross(forward, right);
+
+    // rd - Ray direction.
+    vec3 rd = normalize(forward + FOV*u.x*right + FOV*u.y*up);
+    
+    // Swiveling the camera about the XY-plane (from left to right) when turning corners.
+    // Naturally, it's synchronized with the path in some kind of way.
+	rd.xy = rot2( path(lookAt.z).x/64. )*rd.xy;
+    
+#if 1 // manual camera
+    rd = ray.dir;
+    ro += ray.origin;
 #endif
     
-    
+	
     // Usually, you'd just make this a unit directional light, and be done with it, but I
     // like some of the angular subtleties of point lights, so this is a point light a
     // long distance away. Fake, and probably not advisable, but no one will notice.
-    vec3 lp = vec3(FAR*.5, FAR, FAR) + vec3(0, 0, ray.origin.z);
+    vec3 lp = vec3(FAR*.5, FAR, FAR) + vec3(0, 0, ro.z);
  
 
-    // Raymarching, using Nimitz's "Log Bisection" method. Very handy on stubborn surfaces. :)
-    float t = logBisectTrace(ray.origin, ray.dir);
+	// Raymarching, using Nimitz's "Log Bisection" method. Very handy on stubborn surfaces. :)
+	float t = logBisectTrace(ro, rd);
     
     // Standard sky routine. Worth learning. For outdoor scenes, you render the sky, then the
     // terrain, then mix together with a fog falloff. Pretty straight forward.
-    vec3 sky = getSky(ray.origin, ray.dir, normalize(lp - ray.origin));
+    vec3 sky = getSky(ro, rd, normalize(lp - ro));
     
     // The terrain color. Can't remember why I set it to sky. I'm sure I had my reasons.
     vec3 col = sky;
@@ -426,7 +439,7 @@ vec4 RayTrace (in Ray ray, in vec2 fragCoord)
     // If we've hit the ground, color it up.
     if (t < FAR){
     
-        vec3 sp = ray.origin+t*ray.dir; // Surface point.
+        vec3 sp = ro+t*rd; // Surface point.
         vec3 sn = normal(sp); // Surface normal.
 
         
@@ -451,16 +464,16 @@ vec4 RayTrace (in Ray ray, in vec2 fragCoord)
         float ao = calculateAO(sp, sn, 4.); // Ambient occlusion.
         
         float dif = max( dot( ld, sn ), 0.); // Diffuse term.
-        float spe = pow(max( dot( reflect(-ld, sn), -ray.dir ), 0. ), 5.); // Specular term.
-        float fre = clamp(1.0 + dot(ray.dir, sn), 0., 1.); // Fresnel reflection term.
+        float spe = pow(max( dot( reflect(-ld, sn), -rd ), 0. ), 5.); // Specular term.
+        float fre = clamp(1.0 + dot(rd, sn), 0., 1.); // Fresnel reflection term.
 
        
 
         // Schlick approximation. I use it to tone down the specular term. It's pretty subtle,
         // so could almost be aproximated by a constant, but I prefer it. Here, it's being
         // used to give a hard clay consistency... It "kind of" works.
-        float Schlick = pow( 1. - max(dot(ray.dir, normalize(ray.dir + ld)), 0.), 5.);
-        float fre2 = mix(.2, 1., Schlick);  //F0 = .2 - Hard clay... or close enough.
+		float Schlick = pow( 1. - max(dot(rd, normalize(rd + ld)), 0.), 5.);
+		float fre2 = mix(.2, 1., Schlick);  //F0 = .2 - Hard clay... or close enough.
        
         // Overal global ambience. Without it, the cave sections would be pretty dark. It's made up,
         // but I figured a little reflectance would be in amongst it... Sounds good, anyway. :)
@@ -488,13 +501,15 @@ vec4 RayTrace (in Ray ray, in vec2 fragCoord)
  
         
         // A bit of sky reflection. Not really accurate, but I've been using fake physics since the 90s. :)
-        col += getSky(sp, reflect(ray.dir, sn), ld)*fre*fre2*.5;
+        col += getSky(sp, reflect(rd, sn), ld)*fre*fre2*.5;
         
         
         // Combining all the terms from above. Some diffuse, some specular - both of which are
         // shadowed and occluded - plus some global ambience. Not entirely correct, but it's
         // good enough for the purposes of this demonstation.        
         col = (col*(dif + .1) + fre2*spe)*shd*ao + amb*col;
+       
+        
     }
     
     
@@ -512,11 +527,11 @@ vec4 RayTrace (in Ray ray, in vec2 fragCoord)
     // Standard way to do a square vignette. Note that the maxium value value occurs at "pow(0.5, 4.) = 1./16," 
     // so you multiply by 16 to give it a zero to one range. This one has been toned down with a power
     // term to give it more subtlety.
-    vec2 u = fragCoord/iResolution.xy;
-    col *= pow(16.*u.x*u.y*(1. - u.x)*(1. - u.y) , .0625);
+    //u = fragCoord/iResolution.xy;
+    //col *= pow(16.*u.x*u.y*(1. - u.x)*(1. - u.y) , .0625);
 
     // Done.
-    return vec4(clamp(col, 0., 1.), 1);
+	return vec4(clamp(col, 0., 1.), 1);
 }
 //-----------------------------------------------------------------------------
 
@@ -524,12 +539,12 @@ vec4 RayTrace (in Ray ray, in vec2 fragCoord)
 void mainVR (out vec4 fragColor, in vec2 fragCoord, in vec3 fragRayOri, in vec3 fragRayDir)
 {
     Ray	ray = Ray_Create( fragRayOri, fragRayDir, 0.1 );
-    fragColor = RayTrace(ray, fragCoord);
+    fragColor = RayTrace( ray, fragCoord );
 }
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
     Ray	ray = Ray_From( iCameraFrustumLB, iCameraFrustumRB, iCameraFrustumLT, iCameraFrustumRT,
                         iCameraPos, 0.1, fragCoord / iResolution.xy );
-    fragColor = RayTrace(ray, fragCoord);
+    fragColor = RayTrace( ray, fragCoord );
 }

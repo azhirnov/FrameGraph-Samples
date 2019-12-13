@@ -14,20 +14,53 @@ namespace FG
 */
 	void  Application::_InitSamples ()
 	{
-		_samples.push_back( Shaders::Shadertoy::SirenianDawn );
-		_samples.push_back( Shaders::Shadertoy::NovaMarble );
+		_samples.push_back( Shaders::Shadertoy::Auroras );
+		_samples.push_back( Shaders::Shadertoy::AlienBeacon );
+		_samples.push_back( Shaders::Shadertoy::CloudFlight );
+		_samples.push_back( Shaders::Shadertoy::CloudyTerrain );
+		_samples.push_back( Shaders::Shadertoy::Canyon );
+		_samples.push_back( Shaders::Shadertoy::CanyonPass );
+		_samples.push_back( Shaders::Shadertoy::Dwarf );
+		_samples.push_back( Shaders::Shadertoy::DesertPassage );
+		_samples.push_back( Shaders::Shadertoy::DesertSand );
+		_samples.push_back( Shaders::Shadertoy::Glowballs );
 		_samples.push_back( Shaders::Shadertoy::GlowCity );
-		_samples.push_back( Shaders::ShadertoyVR::Skyline );
-		_samples.push_back( Shaders::ShadertoyVR::SkylineFreeCam );
-		_samples.push_back( Shaders::ShadertoyVR::NightMist );
+		_samples.push_back( Shaders::Shadertoy::Generators );
+		_samples.push_back( Shaders::Shadertoy::Insect );
+		_samples.push_back( Shaders::Shadertoy::Luminescence );
+		_samples.push_back( Shaders::Shadertoy::Mesas );
+		_samples.push_back( Shaders::Shadertoy::NovaMarble );
+		_samples.push_back( Shaders::Shadertoy::Organix );
+		_samples.push_back( Shaders::Shadertoy::PlasmaGlobe );
+		_samples.push_back( Shaders::Shadertoy::PeacefulPostApocalyptic );
+		_samples.push_back( Shaders::Shadertoy::SpaceEgg );
+		_samples.push_back( Shaders::Shadertoy::SculptureIII );
+		_samples.push_back( Shaders::Shadertoy::StructuredVolSampling );
+		_samples.push_back( Shaders::Shadertoy::ServerRoom );
+		_samples.push_back( Shaders::Shadertoy::Volcanic );
+
+		_samples.push_back( Shaders::ShadertoyVR::AncientMars );
+		_samples.push_back( Shaders::ShadertoyVR::Apollonian );
+		_samples.push_back( Shaders::ShadertoyVR::AtTheMountains );
 		_samples.push_back( Shaders::ShadertoyVR::Catacombs );
+		_samples.push_back( Shaders::ShadertoyVR::CavePillars );
 		_samples.push_back( Shaders::ShadertoyVR::DesertCanyon );
 		_samples.push_back( Shaders::ShadertoyVR::FrozenWasteland );
-		_samples.push_back( Shaders::ShadertoyVR::Apollonian );
+		_samples.push_back( Shaders::ShadertoyVR::FractalExplorer );
+		_samples.push_back( Shaders::ShadertoyVR::IveSeen );
+		_samples.push_back( Shaders::ShadertoyVR::NebulousTunnel );
+		_samples.push_back( Shaders::ShadertoyVR::NightMist );
+		_samples.push_back( Shaders::ShadertoyVR::OpticalDeconstruction );
 		_samples.push_back( Shaders::ShadertoyVR::ProteanClouds );
+		_samples.push_back( Shaders::ShadertoyVR::PeacefulPostApocalyptic );
+		_samples.push_back( Shaders::ShadertoyVR::SirenianDawn );
+		_samples.push_back( Shaders::ShadertoyVR::SphereFBM );
+		_samples.push_back( Shaders::ShadertoyVR::Skyline );
+		_samples.push_back( Shaders::ShadertoyVR::Xyptonjtroz );
 
 		_samples.push_back( Shaders::My::ConvexShape2D );
 		_samples.push_back( Shaders::My::OptimizedSDF );
+		_samples.push_back( Shaders::My::PrecalculatedRays );
 
 		_samples.push_back( Shaders::MyVR::ConvexShape3D );
 		_samples.push_back( Shaders::MyVR::Building_1 );
@@ -65,10 +98,10 @@ namespace FG
 			AppConfig	cfg;
 			cfg.surfaceSize			= uint2(1024, 768);
 			cfg.windowTitle			= "Shadertoy";
-			cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib" };
+			cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib", FG_DATA_PATH };
 			cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
 			//cfg.vrMode			= AppConfig::EVRMode::Emulator;
-			cfg.enableDebugLayers	= false;
+			//cfg.enableDebugLayers	= false;
 			CHECK_ERR( _CreateFrameGraph( cfg ));
 		}
 
@@ -81,7 +114,6 @@ namespace FG
 
 		_ResetPosition();
 		GetFPSCamera().SetPerspective( _cameraFov, 1.0f, 0.1f, 100.0f );
-		//GetVRCamera().SetHmdOffsetScale( 0.1f );
 
 		_view->SetMode( _targetSize, _viewMode );
 		_view->SetCamera( GetFPSCamera() );
@@ -310,7 +342,18 @@ namespace FG
 			#endif
 
 			if ( _videoRecorder )
-				CHECK( _videoRecorder->Begin( _targetSize, 60, 7552, EVideoFormat::YUV_420P, "video.mp4" ));
+			{
+				IVideoRecorder::Config		cfg;
+				cfg.format		= EVideoFormat::YUV_420P;
+				cfg.codec		= EVideoCodec::H264;
+				cfg.preferGPU	= true;
+				cfg.preset		= EVideoPreset::Fast;
+				cfg.bitrate		= 7552ull << 10;
+				cfg.fps			= 30;
+				cfg.size		= _targetSize;
+
+				CHECK( _videoRecorder->Begin( cfg, "video.mp4" ));
+			}
 		}
 	}
 	

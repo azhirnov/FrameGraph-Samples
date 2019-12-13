@@ -25,7 +25,8 @@ namespace FG
 		_name{ name },
 		_pplnFilename{ std::move(desc._pplnFilename) },	_pplnDefines{ std::move(desc._pplnDefines) },
 		_channels{ desc._channels },					_surfaceScale{ desc._surfaceScale },
-		_surfaceSize{ desc._surfaceSize },				_format{ desc._format }
+		_surfaceSize{ desc._surfaceSize },				_format{ desc._format },
+		_ipd{ desc._ipd }
 	{}
 //-----------------------------------------------------------------------------
 
@@ -64,6 +65,8 @@ namespace FG
 			_frameGraph->ReleaseResource( INOUT _linearClampSampler );
 			_frameGraph->ReleaseResource( INOUT _nearestRepeatSampler );
 			_frameGraph->ReleaseResource( INOUT _linearRepeatSampler );
+			_frameGraph->ReleaseResource( INOUT _mipmapClampSampler );
+			_frameGraph->ReleaseResource( INOUT _mipmapRepeatSampler );
 		}
 	}
 	
@@ -239,8 +242,7 @@ namespace FG
 									  OUT _ubData.iCameraFrustumRayRB, OUT _ubData.iCameraFrustumRayRT );
 				_ubData.iCameraPos	= _camera.GetCamera().transform.position;
 			}
-
-
+			
 			for (size_t i = 0; i < pass.images.size(); ++i)
 			{
 				if ( pass.resources.HasTexture(UniformID{ "iChannel"s << ToString(i) }) )
@@ -254,6 +256,7 @@ namespace FG
 		
 			_ubData.iResolution = vec3{ float(view_size.x), float(view_size.y), 0.0f };
 			_ubData.iEyeIndex	= eye;
+			_ubData.iCameraIPD	= shader->_ipd; 
 
 			_currTask = cmdBuffer->AddTask( UpdateBuffer{}.SetBuffer( eye_data.ubuffer ).AddData( &_ubData, 1 ).DependsOn( _currTask ));
 		}
@@ -266,6 +269,7 @@ namespace FG
 		DrawVertices	draw_task;
 		draw_task.SetPipeline(
 			_viewMode == EViewMode::Mono		? shader->_pipeline.mono.Get() :
+			_viewMode == EViewMode::Mono360		? shader->_pipeline.mono360.Get() :
 			_viewMode == EViewMode::HMD_VR		? shader->_pipeline.hmdVR.Get() :
 			_viewMode == EViewMode::VR180_Video	? shader->_pipeline.vr180.Get() :
 			_viewMode == EViewMode::VR360_Video	? shader->_pipeline.vr360.Get() : Default );
@@ -341,25 +345,31 @@ namespace FG
 		// compile pipeline
 		if ( _viewMode == EViewMode::Mono and not shader->_pipeline.mono )
 		{
-			shader->_pipeline.mono = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VR_MODE 0\n" );
+			shader->_pipeline.mono = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 0\n" );
 			CHECK_ERR( shader->_pipeline.mono );
+		}
+
+		if ( _viewMode == EViewMode::Mono360 and not shader->_pipeline.mono360 )
+		{
+			shader->_pipeline.mono360 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3601\n" );
+			CHECK_ERR( shader->_pipeline.mono360 );
 		}
 		
 		if ( _viewMode == EViewMode::HMD_VR and not shader->_pipeline.hmdVR )
 		{
-			shader->_pipeline.hmdVR = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VR_MODE 1\n" );
+			shader->_pipeline.hmdVR = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1\n" );
 			CHECK_ERR( shader->_pipeline.hmdVR );
 		}
 		
 		if ( _viewMode == EViewMode::VR180_Video and not shader->_pipeline.vr180 )
 		{
-			shader->_pipeline.vr180 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VR_MODE 180\n" );
+			shader->_pipeline.vr180 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1802\n" );
 			CHECK_ERR( shader->_pipeline.vr180 );
 		}
 		
 		if ( _viewMode == EViewMode::VR360_Video and not shader->_pipeline.vr360 )
 		{
-			shader->_pipeline.vr360 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VR_MODE 360\n" );
+			shader->_pipeline.vr360 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3602\n" );
 			CHECK_ERR( shader->_pipeline.vr360 );
 		}
 
@@ -449,10 +459,11 @@ namespace FG
 
 			BEGIN_ENUM_CHECKS();
 			switch ( _viewMode ) {
-				case EViewMode::Mono :			ppln = shader->_pipeline.mono;	break;
-				case EViewMode::HMD_VR :		ppln = shader->_pipeline.hmdVR;	break;
-				case EViewMode::VR180_Video :	ppln = shader->_pipeline.vr180;	break;
-				case EViewMode::VR360_Video :	ppln = shader->_pipeline.vr360;	break;
+				case EViewMode::Mono :			ppln = shader->_pipeline.mono;		break;
+				case EViewMode::Mono360 :		ppln = shader->_pipeline.mono360;	break;
+				case EViewMode::HMD_VR :		ppln = shader->_pipeline.hmdVR;		break;
+				case EViewMode::VR180_Video :	ppln = shader->_pipeline.vr180;		break;
+				case EViewMode::VR360_Video :	ppln = shader->_pipeline.vr360;		break;
 			}
 			END_ENUM_CHECKS();
 			CHECK_ERR( ppln );
@@ -466,13 +477,15 @@ namespace FG
 			{
 				auto&			ch		= shader->_channels[j];
 				auto&			image	= pass.images[j];
-				UniformID		name	{"iChannel"s << ToString(j)};
+				UniformID		name	{"iChannel"s << ToString(ch.index)};
 				RawSamplerID	samp	= ch.samp ? ch.samp : _linearClampSampler.Get();
 
 				// find channel in shader passes
 				ShadersMap_t::iterator	iter = _shaders.find( ch.name );
 				if ( iter != _shaders.end() )
 				{
+					ASSERT( not ch.flipY );	// not supported for render target
+
 					if ( iter->second == shader )
 						// use image from previous pass
 						image = ImageID{ shader->_perEye[eye].passes[(i-1) & 1].renderTarget.Get() };
@@ -484,7 +497,7 @@ namespace FG
 				}
 				
 				// find channel in loadable images
-				if ( _LoadImage( cmdBuffer, ch.name, OUT image ))
+				if ( _LoadImage( cmdBuffer, ch.name, ch.flipY, OUT image ))
 				{
 					pass.resources.BindTexture( name, image, samp );
 					continue;
@@ -505,8 +518,10 @@ namespace FG
 	{
 		_frameGraph->WaitIdle();
 		
-		if ( destroyPipeline ) {
+		if ( destroyPipeline )
+		{
 			_frameGraph->ReleaseResource( INOUT shader->_pipeline.mono );
+			_frameGraph->ReleaseResource( INOUT shader->_pipeline.mono360 );
 			_frameGraph->ReleaseResource( INOUT shader->_pipeline.hmdVR );
 			_frameGraph->ReleaseResource( INOUT shader->_pipeline.vr180 );
 			_frameGraph->ReleaseResource( INOUT shader->_pipeline.vr360 );
@@ -562,6 +577,7 @@ namespace FG
 				vec4	iMouse;					// mouse pixel coords. xy: current (if MLB down), zw: click
 				vec4	iDate;					// (year, month, day, time in seconds)
 				float	iSampleRate;			// sound sample rate (i.e., 44100)
+				float	iCameraIPD;				// (m) Interpupillary distance, the distance between the eyes.
 				vec3	iCameraFrustumLB;		// frustum rays (left bottom, right bottom, left top, right top)
 				vec3	iCameraFrustumRB;
 				vec3	iCameraFrustumLT;
@@ -572,7 +588,7 @@ namespace FG
 
 			layout(location=0) out vec4	out_Color;
 
-			#if VR_MODE == 1
+			#if VIEW_MODE == 1
 				void mainVR (out vec4 fragColor, in vec2 fragCoord, in vec3 fragRayOri, in vec3 fragRayDir);
 
 				void main ()
@@ -582,10 +598,11 @@ namespace FG
 					vec3 dir   = mix( mix( iCameraFrustumLB, iCameraFrustumRB, uv.x ),
 									  mix( iCameraFrustumLT, iCameraFrustumRT, uv.x ),
 									  uv.y );
+					coord = vec2(coord.x - 0.5, iResolution.y - coord.y + 0.5);
 					mainVR( out_Color, coord, iCameraPos, dir );
 				}
 
-			#elif (VR_MODE == 180) || (VR_MODE == 360)
+			#elif (VIEW_MODE == 1802) || (VIEW_MODE == 3602) || (VIEW_MODE == 3601)
 				void mainVR (out vec4 fragColor, in vec2 fragCoord, in vec3 fragRayOri, in vec3 fragRayDir);
 
 				void main ()
@@ -594,14 +611,15 @@ namespace FG
 					vec2	coord	= gl_FragCoord.xy + gl_SamplePosition;
 					vec2	uv		= coord / iResolution.xy;
 					float	pi		= 3.14159265358979323846f;
-					float	IPD		= 64.0e-4;	// (m) Interpupillary distance, the distance between the eyes.
 
-				#if VR_MODE == 360
-					float	scale	= IPD * 0.5 * (uv.y < 0.5 ? -1.0 : 1.0);		// vr360 top-bottom
-							uv		= vec2( uv.x, fract(uv.y * 2.0) );
-				#else
-					float	scale	= IPD * 0.5 * (uv.x < 0.5 ? -1.0 : 1.0);		// vr180 left-right
-							uv		= vec2( fract(uv.x * 2.0), uv.y ) * 0.5 + 0.25;	// map [0, 1] to [0.25, 0.75]
+				#if   VIEW_MODE == 3602
+					float	scale	= iCameraIPD * 0.5 * (uv.y < 0.5 ? -1.0 : 1.0);		// vr360 top-bottom
+							uv		= vec2( uv.x, (uv.y < 0.5 ? uv.y : uv.y - 0.5) * 2.0 );
+				#elif VIEW_MODE == 1802
+					float	scale	= iCameraIPD * 0.5 * (uv.x < 0.5 ? -1.0 : 1.0);		// vr180 left-right
+							uv		= vec2( (uv.x < 0.5 ? uv.x : uv.x - 0.5) * 0.5 + 0.25, uv.y );	// map [0, 1] to [0.25, 0.75]
+				#elif VIEW_MODE == 3601
+					float	scale	= 1.0;
 				#endif
 
 					float	theta	= uv.x * 2.0 * pi - pi;
@@ -610,6 +628,7 @@ namespace FG
 					vec3	origin	= vec3(cos(theta), 0.0, sin(theta)) * scale;
 					vec3	dir		= vec3(sin(theta) * cos(phi), sin(phi), -cos(theta) * cos(phi));
 
+					coord = vec2(coord.x - 0.5, iResolution.y - coord.y + 0.5);
 					mainVR( out_Color, coord, iCameraPos + origin, dir );
 				}
 
@@ -619,7 +638,7 @@ namespace FG
 				void main ()
 				{
 					vec2 coord = gl_FragCoord.xy + gl_SamplePosition;
-					coord.y = iResolution.y - coord.y - 1.0;
+					coord = vec2(coord.x - 0.5, iResolution.y - coord.y + 0.5);
 
 					mainImage( out_Color, coord );
 				}
@@ -644,9 +663,12 @@ namespace FG
 
 		if ( HasSubString( src1, "iChannel2" ) )
 			src0 << "layout(binding=3) uniform sampler2D  iChannel2;\n";
+		
+		if ( HasSubString( src1, "iChannel3" ) )
+			src0 << "layout(binding=4) uniform sampler2D  iChannel3;\n";
 
 		src0 << fs_source;
-		src0 << src1;
+		src0 << "\n" << src1;
 
 		GraphicsPipelineDesc	desc;
 		desc.AddShader( EShader::Vertex, EShaderLangFormat::VKSL_110, "main", vs_source );
@@ -666,16 +688,25 @@ namespace FG
 		{
 			if ( shader->_pipeline.mono )
 			{
-				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VR_MODE 0\n" ))
+				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 0\n" ))
 				{
 					_frameGraph->ReleaseResource( INOUT shader->_pipeline.mono );
 					shader->_pipeline.mono = std::move(ppln);
 				}
 			}
 
+			if ( shader->_pipeline.mono360 )
+			{
+				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3601\n" ))
+				{
+					_frameGraph->ReleaseResource( INOUT shader->_pipeline.mono360 );
+					shader->_pipeline.mono360 = std::move(ppln);
+				}
+			}
+
 			if ( shader->_pipeline.hmdVR )
 			{
-				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VR_MODE 1\n" ))
+				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1\n" ))
 				{
 					_frameGraph->ReleaseResource( INOUT shader->_pipeline.hmdVR );
 					shader->_pipeline.hmdVR = std::move(ppln);
@@ -684,7 +715,7 @@ namespace FG
 
 			if ( shader->_pipeline.vr180 )
 			{
-				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VR_MODE 180\n" ))
+				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1802\n" ))
 				{
 					_frameGraph->ReleaseResource( INOUT shader->_pipeline.vr180 );
 					shader->_pipeline.vr180 = std::move(ppln);
@@ -693,7 +724,7 @@ namespace FG
 
 			if ( shader->_pipeline.vr360 )
 			{
-				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VR_MODE 360\n" ))
+				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3602\n" ))
 				{
 					_frameGraph->ReleaseResource( INOUT shader->_pipeline.vr360 );
 					shader->_pipeline.vr360 = std::move(ppln);
@@ -749,7 +780,7 @@ namespace FG
 		_nearestClampSampler = _frameGraph->CreateSampler( desc, "NearestClamp" );
 		
 		desc.SetAddressMode( EAddressMode::ClampToEdge );
-		desc.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Linear );
+		desc.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Nearest );
 		_linearClampSampler = _frameGraph->CreateSampler( desc, "LinearClamp" );
 		
 		desc.SetAddressMode( EAddressMode::Repeat );
@@ -757,8 +788,16 @@ namespace FG
 		_nearestRepeatSampler = _frameGraph->CreateSampler( desc, "NearestRepeat" );
 		
 		desc.SetAddressMode( EAddressMode::Repeat );
-		desc.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Linear );
+		desc.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Nearest );
 		_linearRepeatSampler = _frameGraph->CreateSampler( desc, "LinearRepeat" );
+		
+		desc.SetAddressMode( EAddressMode::ClampToEdge );
+		desc.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Linear );
+		_mipmapClampSampler = _frameGraph->CreateSampler( desc, "MipmapClamp" );
+		
+		desc.SetAddressMode( EAddressMode::Repeat );
+		desc.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Linear );
+		_mipmapRepeatSampler = _frameGraph->CreateSampler( desc, "MipmapRepeat" );
 	}
 	
 /*
@@ -766,10 +805,11 @@ namespace FG
 	_LoadImage
 =================================================
 */
-	bool  ShaderView::_LoadImage (const CommandBuffer &cmdBuffer, const String &filename, OUT ImageID &id)
+	bool  ShaderView::_LoadImage (const CommandBuffer &cmdBuffer, const String &filename, bool flipY, OUT ImageID &id)
 	{
 #	if defined(FG_ENABLE_DEVIL) and defined(FG_STD_FILESYSTEM)
-		auto	iter = _imageCache.find( filename );
+		String	name = filename + (flipY ? "|flip" : "");
+		auto	iter = _imageCache.find( name );
 		
 		if ( iter != _imageCache.end() )
 		{
@@ -781,22 +821,23 @@ namespace FG
 		FS::path		fpath	= FS::path{FG_DATA_PATH}.append(filename);
 		auto			image	= MakeShared<IntermImage>( fpath.string() );
 
-		CHECK_ERR( loader.LoadImage( image, {}, null ));
+		CHECK_ERR( loader.LoadImage( image, {}, null, flipY ));
 
 		auto&	level	 = image->GetData()[0][0];
 		String	img_name = fpath.filename().string();
 
-		id = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, level.dimension, level.format, EImageUsage::TransferDst | EImageUsage::Sampled },
+		id = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, level.dimension, level.format, EImageUsage::Transfer | EImageUsage::Sampled },
 											Default, img_name );
 		CHECK_ERR( id );
 
 		_currTask = cmdBuffer->AddTask( UpdateImage{}.SetImage( id ).SetData( level.pixels, level.dimension, level.rowPitch, level.slicePitch ).DependsOn( _currTask ));
+		_currTask = cmdBuffer->AddTask( GenerateMipmaps{}.SetImage( id ).SetRange( 0_mipmap, UMax ).DependsOn( _currTask ));
 
-		_imageCache.insert_or_assign( filename, ImageID{id.Get()} );
+		_imageCache.insert_or_assign( name, ImageID{id.Get()} );
 		return true;
 
 #	else
-		FG_UNUSED( cmdBuffer, filename );
+		FG_UNUSED( cmdBuffer, filename, flipY );
 		id = Default;
 		return false;
 #	endif
