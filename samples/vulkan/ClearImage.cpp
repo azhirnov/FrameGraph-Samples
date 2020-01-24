@@ -206,7 +206,7 @@ bool ClearImageApp::Initialize ()
 								  {},
 								  VulkanDevice::GetRecomendedInstanceLayers(),
 								  VulkanDevice::GetRecomendedInstanceExtensions(),
-								  VulkanDevice::GetAllDeviceExtensions()
+								  VulkanDevice::GetAllDeviceExtensions_v110()
 			));
 
 		shaderSubgroupSupported = EnumEq( vulkan.GetDeviceSubgroupProperties().supportedStages, VK_SHADER_STAGE_COMPUTE_BIT );
