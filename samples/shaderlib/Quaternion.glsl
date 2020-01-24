@@ -188,8 +188,8 @@ quat  QSlerp (const quat qx, const quat qy, const float factor)
 float3  QDirection (const quat q)
 {
 	return float3( 2.0 * q.data.x * q.data.z + 2.0 * q.data.y * q.data.w,
-				  2.0 * q.data.z * q.data.y - 2.0 * q.data.x * q.data.w,
-				  1.0 - 2.0 - q.data.x * q.data.x - 2.0 * q.data.y * q.data.y );
+				   2.0 * q.data.z * q.data.y - 2.0 * q.data.x * q.data.w,
+				   1.0 - 2.0 - q.data.x * q.data.x - 2.0 * q.data.y * q.data.y );
 }
 
 /*
@@ -241,7 +241,7 @@ quat  QRotationZ (const float angleRad)
 */
 quat  QRotation (const float3 anglesRad)
 {
-	return QMul( QMul( QRotationX( anglesRad.x ), QRotationY( anglesRad.y ) ), QRotationZ( anglesRad.z ) );
+	return QMul( QMul( QRotationX( anglesRad.x ), QRotationY( anglesRad.y )), QRotationZ( anglesRad.z ));
 }
 
 /*

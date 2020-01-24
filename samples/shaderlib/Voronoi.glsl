@@ -56,9 +56,12 @@ float4  Voronoi3D (const float3 coord, const float seed)
 
 
 // range [0..inf]
-// based on shader from https://www.shadertoy.com/view/ldl3W8
 float  VoronoiCircles (const float2 coord, const float radiusScale, const float seed)
 {
+	// based on shader from https://www.shadertoy.com/view/ldl3W8
+	// The MIT License
+	// Copyright © 2013 Inigo Quilez
+
 	const int radius = 1;
 	
 	float2	ipoint	= Floor( coord );

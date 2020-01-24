@@ -4,7 +4,7 @@
 
 #include "Math.glsl"
 
-float3  CM_RotateVec (const float3 c, int face)
+float3  CM_RotateVec (const float3 c, const int face)
 {
 	switch ( face )
 	{
@@ -46,7 +46,7 @@ float4  CM_InverseRotation (const float3 c)
 
 
 // Identity Spherical Cube Projection
-float3  CM_IdentitySC_Forward (const float2 snormCoord, int face)
+float3  CM_IdentitySC_Forward (const float2 snormCoord, const int face)
 {
 	return Normalize( CM_RotateVec( float3(snormCoord, 1.0), face ));
 }
@@ -60,7 +60,7 @@ float3  CM_IdentitySC_Inverse (const float3 coord)
 
 
 // Tangential Spherical Cube Projection
-float3  CM_TangentialSC_Forward (const float2 snormCoord, int face)
+float3  CM_TangentialSC_Forward (const float2 snormCoord, const int face)
 {
 	const float	warp_theta		= 0.868734829276;
 	const float	tan_warp_theta	= 1.182286685546; //tan( warp_theta );

@@ -9,6 +9,13 @@
 #define float3x3	mat3x3
 #define float4x4	mat4x4
 
+#define double2		dvec2
+#define double3		dvec3
+#define double4		dvec4
+#define double2x2	dmat2x2
+#define double3x3	dmat3x3
+#define double4x4	dmat4x4
+
 #define int2		ivec2
 #define int3		ivec3
 #define int4		ivec4
@@ -96,6 +103,21 @@ bool  Equals (const float  lhs, const float  rhs)  { return lhs == rhs; }
 bool2 Equals (const float2 lhs, const float2 rhs)  { return equal( lhs, rhs ); }
 bool3 Equals (const float3 lhs, const float3 rhs)  { return equal( lhs, rhs ); }
 bool4 Equals (const float4 lhs, const float4 rhs)  { return equal( lhs, rhs ); }
+
+bool  Equals (const int  lhs, const int  rhs)  		{ return lhs == rhs; }
+bool2 Equals (const int2 lhs, const int2 rhs)  		{ return equal( lhs, rhs ); }
+bool3 Equals (const int3 lhs, const int3 rhs)  		{ return equal( lhs, rhs ); }
+bool4 Equals (const int4 lhs, const int4 rhs)  		{ return equal( lhs, rhs ); }
+
+bool  Equals (const uint  lhs, const uint  rhs)  	{ return lhs == rhs; }
+bool2 Equals (const uint2 lhs, const uint2 rhs)  	{ return equal( lhs, rhs ); }
+bool3 Equals (const uint3 lhs, const uint3 rhs)  	{ return equal( lhs, rhs ); }
+bool4 Equals (const uint4 lhs, const uint4 rhs)  	{ return equal( lhs, rhs ); }
+
+bool  Equals (const double  lhs, const double  rhs)  { return lhs == rhs; }
+bool2 Equals (const double2 lhs, const double2 rhs)  { return equal( lhs, rhs ); }
+bool3 Equals (const double3 lhs, const double3 rhs)  { return equal( lhs, rhs ); }
+bool4 Equals (const double4 lhs, const double4 rhs)  { return equal( lhs, rhs ); }
 
 #define AllLess( a, b )			All( Less( (a), (b) ))
 #define AllLessEqual( a, b )	All( LessEqual( (a), (b) ))
@@ -200,31 +222,31 @@ int Wrap (const int x, const int minVal, const int maxVal)
 
 int BitRotateLeft  (const int x, uint shift)
 {
-	const uint mask = 31;
+	const uint mask = 31u;
 	shift = shift & mask;
-	return (x << shift) | (x >> ( ~(shift-1) & mask ));
+	return (x << shift) | (x >> ( ~(shift-1u) & mask ));
 }
 
 uint BitRotateLeft  (const uint x, uint shift)
 {
-	const uint mask = 31;
+	const uint mask = 31u;
 	shift = shift & mask;
-	return (x << shift) | (x >> ( ~(shift-1) & mask ));
+	return (x << shift) | (x >> ( ~(shift-1u) & mask ));
 }
 
 
 int BitRotateRight (const int x, uint shift)
 {
-	const uint mask = 31;
+	const uint mask = 31u;
 	shift = shift & mask;
-	return (x >> shift) | (x << ( ~(shift-1) & mask ));
+	return (x >> shift) | (x << ( ~(shift-1u) & mask ));
 }
 
 uint BitRotateRight (const uint x, uint shift)
 {
-	const uint mask = 31;
+	const uint mask = 31u;
 	shift = shift & mask;
-	return (x >> shift) | (x << ( ~(shift-1) & mask ));
+	return (x >> shift) | (x << ( ~(shift-1u) & mask ));
 }
 
 

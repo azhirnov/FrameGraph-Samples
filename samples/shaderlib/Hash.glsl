@@ -6,6 +6,9 @@
 
 
 // DHash from https://www.shadertoy.com/view/4djSRW 
+// MIT License...
+// Copyright (c)2014 David Hoskins.
+
 // range [0..1]
 
 float4 _DHashScale ()  { return float4( 0.1031, 0.1030, 0.0973, 0.1099 ); }
@@ -107,6 +110,7 @@ float4 DHash44 (const float4 p)
 float WeylHash (const int2 c)
 {
 	// from https://www.shadertoy.com/view/MsV3z3
+	// LICENSE: http://unlicense.org/
 
 	const int x = 0x3504f333 * c.x * c.x + c.y;
 	const int y = 0xf1bbcdcb * c.y * c.y + c.x;
@@ -118,6 +122,7 @@ float WeylHash (const int2 c)
 float WeylHash (const float2 c)
 {
 	// from https://www.shadertoy.com/view/Xdy3Rc
+	// LICENSE: http://unlicense.org/
 
 	// a pair of Weyl values with low star discrepancy
 	const float2 W = float2( 0.5545497, 0.308517 );
@@ -129,6 +134,7 @@ float WeylHash (const float2 c)
 float ModHash (float2 uv)
 {
 	// from https://www.shadertoy.com/view/Xts3R7
+	// license CC BY-NC-SA 3.0
 
 	uv = Abs( Mod( 10.0 * Fract( (uv + 1.1312) * 31.0 ), uv + 2.0 ) );
 	uv = Abs( Mod( uv.x * Fract( (uv + 1.721711) * 17.0 ), uv ) );
@@ -138,7 +144,9 @@ float ModHash (float2 uv)
 float  HEHash (uint n)
 {
 	// from https://www.shadertoy.com/view/llGSzw
-	
+	// The MIT License
+	// Copyright © 2017 Inigo Quilez
+
 	// integer hash copied from Hugo Elias
 	n = (n << 13U) ^ n;
 	n = n * (n * n * 15731U + 789221U) + 1376312589U;
@@ -163,6 +171,8 @@ uint3 _IWeylConst ()
 uint IWeylHash (const uint2 p)
 {
 	// from https://www.shadertoy.com/view/4dlcR4
+	// LICENSE: http://unlicense.org/
+	
 	uint	x = p.x;
 	uint	y = p.y;
 
@@ -176,6 +186,8 @@ uint IWeylHash (const uint2 p)
 uint IWeylHash2 (const uint2 p)
 {
 	// from https://www.shadertoy.com/view/4dlcR4
+	// LICENSE: http://unlicense.org/
+	
 	uint	x = p.x;
 	uint	y = p.y;
 	
@@ -192,6 +204,7 @@ uint IWeylHash2 (const uint2 p)
 
 
 // from https://www.shadertoy.com/view/4ssXRX
+// license CC BY-NC-SA 3.0
 
 //note: uniformly distributed, normalized rand, [0;1]
 #define nrand( n ) Fract( Sin( Dot( (n).xy, float2(12.9898, 78.233) )) * 43758.5453 )
