@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019,  Zhirnov Andrey. For more information see 'LICENSE'
+// Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 /*
 	Same as AsyncCompute1 but with VK_QUEUE_FAMILY_EXTERNAL,
 	now you don't need to explicitly specify the destination queue family.

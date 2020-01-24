@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019,  Zhirnov Andrey. For more information see 'LICENSE'
+// Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 /*
 	https://en.wikipedia.org/wiki/List_of_refractive_indices
 	https://en.wikipedia.org/wiki/Optical_depth
