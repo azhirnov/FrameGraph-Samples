@@ -342,34 +342,51 @@ namespace FG
 */
 	bool  ShaderView::_CreateShader (const CommandBuffer &cmdBuffer, const ShaderPtr &shader)
 	{
+		String	samplers;
+		for (auto& ch : shader->_channels)
+		{
+			EImage	type = _GetImageType( ch.name );
+
+			if ( type == EImage::Tex2D )
+				samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler2D iChannel" << ToString(ch.index) << ";\n";
+			else
+			if ( type == EImage::Tex3D )
+				samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler3D iChannel" << ToString(ch.index) << ";\n";
+			else
+			if ( type == EImage::Unknown )
+			{}
+			else
+				RETURN_ERR( "unsupported imag type" );
+		}
+
 		// compile pipeline
 		if ( _viewMode == EViewMode::Mono and not shader->_pipeline.mono )
 		{
-			shader->_pipeline.mono = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 0\n" );
+			shader->_pipeline.mono = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 0\n", samplers );
 			CHECK_ERR( shader->_pipeline.mono );
 		}
 
 		if ( _viewMode == EViewMode::Mono360 and not shader->_pipeline.mono360 )
 		{
-			shader->_pipeline.mono360 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3601\n" );
+			shader->_pipeline.mono360 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3601\n", samplers );
 			CHECK_ERR( shader->_pipeline.mono360 );
 		}
 		
 		if ( _viewMode == EViewMode::HMD_VR and not shader->_pipeline.hmdVR )
 		{
-			shader->_pipeline.hmdVR = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1\n" );
+			shader->_pipeline.hmdVR = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1\n", samplers );
 			CHECK_ERR( shader->_pipeline.hmdVR );
 		}
 		
 		if ( _viewMode == EViewMode::VR180_Video and not shader->_pipeline.vr180 )
 		{
-			shader->_pipeline.vr180 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1802\n" );
+			shader->_pipeline.vr180 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1802\n", samplers );
 			CHECK_ERR( shader->_pipeline.vr180 );
 		}
 		
 		if ( _viewMode == EViewMode::VR360_Video and not shader->_pipeline.vr360 )
 		{
-			shader->_pipeline.vr360 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3602\n" );
+			shader->_pipeline.vr360 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3602\n", samplers );
 			CHECK_ERR( shader->_pipeline.vr360 );
 		}
 
@@ -409,33 +426,48 @@ namespace FG
 
 		// create render targets
 		for (auto& eye_data : shader->_perEye)
-		for (auto& pass : eye_data.passes)
 		{
-			if ( shader->_surfaceSize.has_value() )
-				pass.viewport = shader->_surfaceSize.value();
-			else
-				pass.viewport = uint2( float2(_viewSize) * shader->_surfaceScale.value_or(1.0f) + 0.5f );
-
-			ImageDesc		desc;
-			desc.imageType	= EImage::Tex2D;
-			desc.dimension	= uint3{ pass.viewport, 1 };
-			desc.format		= shader->_format.value_or( _imageFormat );
-			desc.usage		= EImageUsage::Transfer | EImageUsage::Sampled | EImageUsage::ColorAttachment;
-
-			EResourceState	def_state	= is_vr ? EResourceState::TransferSrc : EResourceState::Unknown;
-			const String	name		= String(shader->Name()) << "-RT-" << ToString(Distance( eye_data.passes.data(), &pass ))
-											<< (is_vr ? (shader->_perEye.data() == &eye_data ? "-left" : "-right") : "");
-			
-			pass.renderTarget = _frameGraph->CreateImage( desc, Default, def_state, name );
-			CHECK_ERR( pass.renderTarget );
-
 			if ( _imageSamples > 1 )
 			{
+				ImageDesc		desc;
 				desc.imageType	= EImage::Tex2DMS;
+				desc.format		= shader->_format.value_or( _imageFormat );
+				desc.usage		= EImageUsage::TransferSrc | EImageUsage::ColorAttachment;
 				desc.samples	= MultiSamples{ _imageSamples };
+				
+				if ( shader->_surfaceSize.has_value() )
+					desc.dimension = uint3( shader->_surfaceSize.value(), 1 );
+				else
+					desc.dimension = uint3( uint2( float2(_viewSize) * shader->_surfaceScale.value_or(1.0f) + 0.5f ), 1 );
 
-				pass.renderTargetMS = _frameGraph->CreateImage( desc, Default, def_state, name );
-				CHECK_ERR( pass.renderTargetMS );
+				eye_data.renderTargetMS = _frameGraph->CreateImage( desc, Default, EResourceState::ColorAttachmentWrite, String(shader->Name()) << "-MSRT" );
+				CHECK_ERR( eye_data.renderTargetMS );
+			}
+
+			for (auto& pass : eye_data.passes)
+			{
+				if ( shader->_surfaceSize.has_value() )
+					pass.viewport = shader->_surfaceSize.value();
+				else
+					pass.viewport = uint2( float2(_viewSize) * shader->_surfaceScale.value_or(1.0f) + 0.5f );
+
+				ImageDesc		desc;
+				desc.imageType	= EImage::Tex2D;
+				desc.dimension	= uint3{ pass.viewport, 1 };
+				desc.format		= shader->_format.value_or( _imageFormat );
+				desc.usage		= EImageUsage::Transfer | EImageUsage::Sampled | EImageUsage::ColorAttachment;
+
+				EResourceState	def_state	= is_vr ? EResourceState::TransferSrc : EResourceState::Unknown;
+				const String	name		= String(shader->Name()) << "-RT-" << ToString(Distance( eye_data.passes.data(), &pass ))
+												<< (is_vr ? (shader->_perEye.data() == &eye_data ? "-left" : "-right") : "");
+			
+				pass.renderTarget = _frameGraph->CreateImage( desc, Default, def_state, name );
+				CHECK_ERR( pass.renderTarget );
+
+				if ( _imageSamples > 1 )
+				{
+					pass.renderTargetMS = eye_data.renderTargetMS.Get();
+				}
 			}
 		}
 		
@@ -529,9 +561,10 @@ namespace FG
 
 		for (auto& eye_data : shader->_perEye)
 		{
+			_frameGraph->ReleaseResource( INOUT eye_data.renderTargetMS );
+
 			for (auto& pass : eye_data.passes)
 			{
-				_frameGraph->ReleaseResource( INOUT pass.renderTargetMS );
 				_frameGraph->ReleaseResource( INOUT pass.renderTarget );
 			
 				for (auto& img : pass.images)
@@ -550,7 +583,7 @@ namespace FG
 	_Compile
 =================================================
 */
-	GPipelineID  ShaderView::_Compile (StringView name, StringView defs) const
+	GPipelineID  ShaderView::_Compile (StringView name, StringView defs, StringView samplers) const
 	{
 		const char	vs_source[] = R"#(
 			const vec2	g_Positions[] = {
@@ -565,6 +598,7 @@ namespace FG
 
 		const char	fs_source[] = R"#(
 			#extension GL_GOOGLE_include_directive : require
+			#extension GL_EXT_control_flow_attributes : require
 
 			layout(binding=0, std140) uniform  ShadertoyUB
 			{
@@ -655,18 +689,7 @@ namespace FG
 		if ( not defs.empty() )
 			src0 << defs << '\n';
 
-		if ( HasSubString( src1, "iChannel0" ) )
-			src0 << "layout(binding=1) uniform sampler2D  iChannel0;\n";
-
-		if ( HasSubString( src1, "iChannel1" ) )
-			src0 << "layout(binding=2) uniform sampler2D  iChannel1;\n";
-
-		if ( HasSubString( src1, "iChannel2" ) )
-			src0 << "layout(binding=3) uniform sampler2D  iChannel2;\n";
-		
-		if ( HasSubString( src1, "iChannel3" ) )
-			src0 << "layout(binding=4) uniform sampler2D  iChannel3;\n";
-
+		src0 << samplers;
 		src0 << fs_source;
 		src0 << "\n" << src1;
 
@@ -674,7 +697,12 @@ namespace FG
 		desc.AddShader( EShader::Vertex, EShaderLangFormat::VKSL_110, "main", vs_source );
 		desc.AddShader( EShader::Fragment, EShaderLangFormat::VKSL_110 | EShaderLangFormat::EnableDebugTrace, "main", std::move(src0), name );
 
-		return _frameGraph->CreatePipeline( desc, name );
+		GPipelineID ppln = _frameGraph->CreatePipeline( desc, name );
+
+		if ( ppln )
+			FG_LOGI( "Compiled pipeline '"s << name << "'" );
+
+		return ppln;
 	}
 	
 /*
@@ -686,9 +714,26 @@ namespace FG
 	{
 		for (auto& shader : _ordered)
 		{
+			String	samplers;
+			for (auto& ch : shader->_channels)
+			{
+				EImage	type = _GetImageType( ch.name );
+
+				if ( type == EImage::Tex2D )
+					samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler2D iChannel" << ToString(ch.index) << ";\n";
+				else
+				if ( type == EImage::Tex3D )
+					samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler3D iChannel" << ToString(ch.index) << ";\n";
+				else
+				if ( type == EImage::Unknown )
+				{}
+				else
+					RETURN_ERR( "unsupported imag type" );
+			}
+
 			if ( shader->_pipeline.mono )
 			{
-				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 0\n" ))
+				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 0\n", samplers ))
 				{
 					_frameGraph->ReleaseResource( INOUT shader->_pipeline.mono );
 					shader->_pipeline.mono = std::move(ppln);
@@ -697,7 +742,7 @@ namespace FG
 
 			if ( shader->_pipeline.mono360 )
 			{
-				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3601\n" ))
+				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3601\n", samplers ))
 				{
 					_frameGraph->ReleaseResource( INOUT shader->_pipeline.mono360 );
 					shader->_pipeline.mono360 = std::move(ppln);
@@ -706,7 +751,7 @@ namespace FG
 
 			if ( shader->_pipeline.hmdVR )
 			{
-				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1\n" ))
+				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1\n", samplers ))
 				{
 					_frameGraph->ReleaseResource( INOUT shader->_pipeline.hmdVR );
 					shader->_pipeline.hmdVR = std::move(ppln);
@@ -715,7 +760,7 @@ namespace FG
 
 			if ( shader->_pipeline.vr180 )
 			{
-				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1802\n" ))
+				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1802\n", samplers ))
 				{
 					_frameGraph->ReleaseResource( INOUT shader->_pipeline.vr180 );
 					shader->_pipeline.vr180 = std::move(ppln);
@@ -724,7 +769,7 @@ namespace FG
 
 			if ( shader->_pipeline.vr360 )
 			{
-				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3602\n" ))
+				if ( GPipelineID ppln = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3602\n", samplers ))
 				{
 					_frameGraph->ReleaseResource( INOUT shader->_pipeline.vr360 );
 					shader->_pipeline.vr360 = std::move(ppln);
@@ -807,6 +852,33 @@ namespace FG
 */
 	bool  ShaderView::_LoadImage (const CommandBuffer &cmdBuffer, const String &filename, bool flipY, OUT ImageID &id)
 	{
+#	ifdef FG_STD_FILESYSTEM
+		EImage		img_type = _GetImageType( filename );
+		FS::path	fpath	 = FS::path{FG_DATA_PATH}.append(filename);
+
+		if ( img_type == EImage::Tex2D )
+			return _LoadImage2D( cmdBuffer, fpath.string(), flipY, OUT id );
+
+		if ( img_type == EImage::Tex3D )
+		{
+			CHECK_ERR( not flipY );
+			return _LoadImage3D( cmdBuffer, fpath.string(), OUT id );
+		}
+
+		RETURN_ERR( "unsupported image type" );
+
+#	else
+		return false;
+#	endif
+	}
+	
+/*
+=================================================
+	_LoadImage2D
+=================================================
+*/
+	bool  ShaderView::_LoadImage2D (const CommandBuffer &cmdBuffer, const String &filename, bool flipY, OUT ImageID &id)
+	{
 #	if defined(FG_ENABLE_DEVIL) and defined(FG_STD_FILESYSTEM)
 		String	name = filename + (flipY ? "|flip" : "");
 		auto	iter = _imageCache.find( name );
@@ -818,7 +890,7 @@ namespace FG
 		}
 
 		DevILLoader		loader;
-		FS::path		fpath	= FS::path{FG_DATA_PATH}.append(filename);
+		FS::path		fpath	{filename};
 		auto			image	= MakeShared<IntermImage>( fpath.string() );
 
 		CHECK_ERR( loader.LoadImage( image, {}, null, flipY ));
@@ -827,7 +899,7 @@ namespace FG
 		String	img_name = fpath.filename().string();
 
 		id = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, level.dimension, level.format, EImageUsage::Transfer | EImageUsage::Sampled },
-											Default, img_name );
+										Default, img_name );
 		CHECK_ERR( id );
 
 		_currTask = cmdBuffer->AddTask( UpdateImage{}.SetImage( id ).SetData( level.pixels, level.dimension, level.rowPitch, level.slicePitch ).DependsOn( _currTask ));
@@ -845,6 +917,54 @@ namespace FG
 	
 /*
 =================================================
+	_LoadImage3D
+=================================================
+*/
+	bool  ShaderView::_LoadImage3D (const CommandBuffer &cmdBuffer, const String &filename, OUT ImageID &id)
+	{
+		auto	iter = _imageCache.find( filename );
+		
+		if ( iter != _imageCache.end() )
+		{
+			id = ImageID{ iter->second.Get() };
+			return true;
+		}
+
+		uint		header[5] = {};
+		FileRStream	file		{filename};
+
+		CHECK_ERR( file.IsOpen() );
+		CHECK_ERR( file.Read( header, BytesU::SizeOf(header) ));
+
+		Array<uint8_t>	buf;
+		CHECK_ERR( file.Read( size_t(file.RemainingSize()), OUT buf ));
+
+		CHECK_ERR( header[0] == 0x004e4942 );
+
+		EPixelFormat	fmt;
+		switch ( header[4] )
+		{
+			case 1 :	fmt = EPixelFormat::R8_UNorm;		break;
+			case 4 :	fmt = EPixelFormat::RGBA8_UNorm;	break;
+			default :	RETURN_ERR( "unknown format" );
+		}
+
+		FS::path	fpath	{filename};
+		String		img_name = fpath.filename().string();
+
+		id = _frameGraph->CreateImage( ImageDesc{ EImage::Tex3D, uint3{header[1], header[2], header[3]}, fmt, EImageUsage::Transfer | EImageUsage::Sampled },
+									   Default, img_name );
+		CHECK_ERR( id );
+
+		_currTask = cmdBuffer->AddTask( UpdateImage{}.SetImage( id ).SetData( buf, uint3{header[1], header[2], header[3]} ).DependsOn( _currTask ));
+		_currTask = cmdBuffer->AddTask( GenerateMipmaps{}.SetImage( id ).SetRange( 0_mipmap, UMax ).DependsOn( _currTask ));
+		
+		_imageCache.insert_or_assign( filename, ImageID{id.Get()} );
+		return true;
+	}
+
+/*
+=================================================
 	_HasImage
 =================================================
 */
@@ -856,5 +976,28 @@ namespace FG
 		return true;
 	#endif
 	}
+	
+/*
+=================================================
+	_GetImageType
+=================================================
+*/
+	EImage  ShaderView::_GetImageType (StringView filename) const
+	{
+	#ifdef FG_STD_FILESYSTEM
+		FS::path	fpath {filename};
+
+		if ( fpath.extension() == ".bin" )
+			return EImage::Tex3D;
+
+		// TODO: cubemap
+
+		return EImage::Tex2D;
+
+	#else
+		return EImage::Unknown;
+	#endif
+	}
+
 
 }	// FG

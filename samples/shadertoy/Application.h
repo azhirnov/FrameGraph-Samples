@@ -20,6 +20,7 @@ namespace FG
 
 		using EViewMode		= ShaderView::EViewMode;
 		using ShaderDescr	= ShaderView::ShaderDescr;
+		using Microsec		= std::chrono::microseconds;
 
 
 	// variables
@@ -35,12 +36,13 @@ namespace FG
 
 		RGBA32f					_selectedPixel;
 		
-		TimePoint_t				_startTime;
+		Microsec				_shaderTime;
 		TimePoint_t				_lastUpdateTime;
 		uint					_frameCounter	= 0;
 
 		bool					_pause			= false;
 		bool					_freeze			= false;
+		bool					_skipLastTime	= false;
 		bool					_vrMirror		= false;
 
 		UniquePtr<IVideoRecorder>	_videoRecorder;

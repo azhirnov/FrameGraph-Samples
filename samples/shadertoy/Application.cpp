@@ -142,8 +142,8 @@ namespace FG
 			if ( key == "U" )		_view->DebugPixel( GetMousePos() / vec2{GetSurfaceSize().x, GetSurfaceSize().y} );
 			if ( key == "P" )		_ResetPosition();
 
-			if ( key == "F" )		_freeze = not _freeze;
-			if ( key == "space" )	_pause = not _pause;
+			if ( key == "F" )		{ _skipLastTime = _freeze;	_freeze = not _freeze;	}
+			if ( key == "space" )	{ _skipLastTime = _pause;	_pause  = not _pause;	}
 
 			if ( key == "M" )		_vrMirror = not _vrMirror;
 		}
@@ -213,18 +213,26 @@ namespace FG
 			const auto	time = TimePoint_t::clock::now();
 
 			if ( _frameCounter == 0 )
-				_startTime = time;
-
-			const SecondsF	app_dt		= std::chrono::duration_cast<SecondsF>( (_freeze ? _lastUpdateTime : time) - _startTime );
+				_shaderTime = {};
+			
+			const SecondsF	app_dt		= std::chrono::duration_cast<SecondsF>( _shaderTime );
 			const SecondsF	frame_dt	= std::chrono::duration_cast<SecondsF>( time - _lastUpdateTime );
 
 			std::tie(task, image_l, image_r) = _view->Draw( cmdbuf, _frameCounter, app_dt, frame_dt );
 			CHECK_ERR( task and image_l );
 
-			if ( not _freeze ) {
-				_lastUpdateTime	= time;
-				++_frameCounter;
+			if ( _skipLastTime )
+			{
+				_skipLastTime = false;
 			}
+			else
+			if ( not _freeze )
+			{
+				++_frameCounter;
+				_shaderTime += std::chrono::duration_cast<Microsec>(time - _lastUpdateTime);
+			}
+				
+			_lastUpdateTime	= time;
 		}
 
 

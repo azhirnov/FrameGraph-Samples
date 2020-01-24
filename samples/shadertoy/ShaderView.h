@@ -99,16 +99,17 @@ namespace FG
 
 			struct PerPass {
 				PipelineResources	resources;
-				ImageID				renderTargetMS;
+				RawImageID			renderTargetMS;
 				ImageID				renderTarget;
 				uint2				viewport;
 				ChannelImages_t		images;
 			};
-			using PerPass_t		= StaticArray< PerPass, 4 >;
+			using PerPass_t		= StaticArray< PerPass, 2 >;
 
 			struct PerEye {
 				PerPass_t		passes;
 				BufferID		ubuffer;
+				ImageID			renderTargetMS;
 			};
 
 			using PerEye_t		= FixedArray< PerEye, 2 >;
@@ -221,12 +222,14 @@ namespace FG
 		bool _CreateShader (const CommandBuffer &cmd, const ShaderPtr &shader);
 		void _DestroyShader (const ShaderPtr &shader, bool destroyPipeline);
 		bool _DrawWithShader (const CommandBuffer &cmd, const ShaderPtr &shader, uint eye, uint passIndex, bool isLast);
-		void _UpdateShaderData (uint frameId, SecondsF time, SecondsF dt);
 
 		bool _LoadImage (const CommandBuffer &cmd, const String &filename, bool flipY, OUT ImageID &id);
+		bool _LoadImage2D (const CommandBuffer &cmd, const String &filename, bool flipY, OUT ImageID &id);
+		bool _LoadImage3D (const CommandBuffer &cmd, const String &filename, OUT ImageID &id);
 		bool _HasImage (StringView filename) const;
+		EImage _GetImageType (StringView filename) const;
 
-		GPipelineID  _Compile (StringView name, StringView defs) const;
+		GPipelineID  _Compile (StringView name, StringView defs, StringView samplers) const;
 	};
 
 
