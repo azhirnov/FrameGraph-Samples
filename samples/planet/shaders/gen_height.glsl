@@ -1,6 +1,7 @@
 
 #extension GL_GOOGLE_include_directive : require
 #extension GL_KHR_memory_scope_semantics : require
+#extension GL_EXT_control_flow_attributes : require
 
 layout (local_size_x_id = 0, local_size_y_id = 1, local_size_z = 1) in;
 
@@ -8,6 +9,7 @@ layout (local_size_x_id = 0, local_size_y_id = 1, local_size_z = 1) in;
 #include "SDF.glsl"
 #include "CubeMap.glsl"
 #include "Hash.glsl"
+#include "Noise.glsl"
 
 
 layout(push_constant, std140) uniform PushConst {
@@ -22,42 +24,22 @@ layout(binding=0) writeonly restrict uniform image2D  un_OutHeight;
 layout(binding=1) writeonly restrict uniform image2D  un_OutNormal;
 
 
-float3 CenterOfVoronoiCell (float3 local, float3 global, float time)
+float FBM (in float3 coord)
 {
-	float3 coord = local + global;
-	return local + (sin( time * DHash33( coord ) * 0.628 ) * 0.5 + 0.5);
-}
+	const float3x3 m = float3x3( 0.00,  0.80,  0.60, -0.80,  0.36, -0.48, -0.60, -0.48,  0.64 );
 
-float VoronoiCircles (in float3 coord, float time)
-{
-	const int radius = 1;
+	float	total		= 0.0;
+	float	amplitude	= 1.0;
+	float	freq		= 1.0;
 
-	float3	ipoint	= Floor( coord );
-	float3	fpoint	= Fract( coord );
-	
-	float3	center	= fpoint;
-	float3	icenter	= float3(0.0);
-	
-	float	md		= 2147483647.0;
-	
-	// find nearest circle
-	for (int z = -radius; z <= radius; ++z)
-	for (int y = -radius; y <= radius; ++y)
-	for (int x = -radius; x <= radius; ++x)
+	for (int i = 0; i < 7; ++i)
 	{
-		float3	cur	= float3(x, y, z);
-		float3	c	= CenterOfVoronoiCell( float3(cur), ipoint, time );
-		float	d	= Dot( c - fpoint, c - fpoint );
-
-		if ( d < md )
-		{
-			md = d;
-			center = c;
-			icenter = cur;
-		}
+		total += GradientNoise( coord*freq ) * amplitude;
+		//coord = m * coord;
+		freq *= 2.5;
+		amplitude *= 0.5;
 	}
-
-	return md;
+	return total;
 }
 
 
@@ -65,9 +47,12 @@ float4 GetPosition (const int2 coord)
 {
 	float2	ncoord	= ToSNorm( float2(coord) / float2(pc.faceDim - 1) );
 	float3	pos		= PROJECTION( ncoord, pc.face );
-	//float	height	= -VoronoiCircles( pos * 4.251 + 3.333, 3.5 ) * 0.1;
-	float	height	= SDF_Sphere( Fract( pos * 4.0 ) - 0.5, 0.25 ) * 0.1;
-	return float4( pos * (1.0 + height), height );
+	
+	float	height	= FBM( pos ) * 0.04;
+	//float	height	= SDF_Sphere( Fract( pos * 4.0 ) - 0.5, 0.25 ) * 0.1;
+	//float	height	= GradientNoise( pos * 4.251 ) * 0.1;
+
+	return float4( pos, height );
 }
 
 
@@ -87,10 +72,11 @@ void main ()
 	const int2		lsize		= GetLocalSize().xy - 2;
 	const int2		group		= GetGroupCoord().xy;
 	const int2		coord		= local + lsize * group;
-	const float4	center		= GetPosition( coord );
+	const float4	pos_h		= GetPosition( coord );
+	const float3	pos			= pos_h.xyz * (1.0 + pos_h.w);
 	const bool4		is_active	= bool4( greaterThanEqual( local, int2(0) ), lessThan( local, lsize ));
 
-	s_Positions[gl_LocalInvocationIndex ] = center.xyz;
+	s_Positions[ gl_LocalInvocationIndex ] = pos;
 
 	if ( All( is_active ))
 	{
@@ -102,7 +88,7 @@ void main ()
 		const float3	v1		= ReadPosition( local + offset.yx );
 		const float3	v2		= ReadPosition( local + offset.zx );
 		const float3	v3		= ReadPosition( local + offset.xy );
-		const float3	v4		= center.xyz;
+		const float3	v4		= pos;
 		const float3	v5		= ReadPosition( local + offset.zy );
 		const float3	v6		= ReadPosition( local + offset.xz );
 		const float3	v7		= ReadPosition( local + offset.yz );
@@ -115,7 +101,7 @@ void main ()
 		normal += Cross( v3 - v4, v0 - v4 );	// 3-4, 0-4
 		normal  = Normalize( normal );
 
-		imageStore( un_OutHeight, coord, float4(center.w) );
+		imageStore( un_OutHeight, coord, float4(pos_h.w) );
 		imageStore( un_OutNormal, coord, float4(normal, 0.0) );
 	}
 }

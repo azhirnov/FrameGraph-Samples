@@ -56,22 +56,12 @@ namespace {
 
 			CHECK_ERR( _CreateFrameGraph( cfg ));
 		}		
-		_depthBuffer = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, uint3{GetSurfaceSize()}, EPixelFormat::Depth24_Stencil8, EImageUsage::DepthStencilAttachment },
+		_depthBuffer = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, uint3{GetSurfaceSize()}, EPixelFormat::Depth32F_Stencil8, EImageUsage::DepthStencilAttachment },
 												 Default, "DepthBuffer" );
 		CHECK_ERR( _depthBuffer );
 
 		_linearSampler = _frameGraph->CreateSampler( SamplerDesc{}.SetAddressMode( EAddressMode::Repeat )
 								.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Linear )).Release();
-
-		// upload resource data
-		auto	cmdbuf = _frameGraph->Begin( CommandBufferDesc{ EQueueType::Graphics });
-		{
-			CHECK_ERR( _CreatePlanet( cmdbuf ));
-			CHECK_ERR( _GenerateHeightMap( cmdbuf ));
-			//CHECK_ERR( _CreateGenerators() );
-		}
-		CHECK_ERR( _frameGraph->Execute( cmdbuf ));
-		CHECK_ERR( _frameGraph->Flush() );
 		
 		GetFPSCamera().SetPosition({ 0.0f, 0.0f, 2.0f });
 		return true;
@@ -89,6 +79,7 @@ namespace {
 		CHECK_ERR( _planet.cube.Create( cmdbuf, Lod, Lod ));
 
 		// create height map
+		if ( not _planet.heightMap )
 		{
 			_planet.heightMap = _frameGraph->CreateImage( ImageDesc{ EImage::TexCube, uint3{face_size}, EPixelFormat::R16F,
 																	 EImageUsage::Storage | EImageUsage::Transfer | EImageUsage::Sampled, 6_layer },
@@ -97,6 +88,7 @@ namespace {
 		}
 		
 		// create normal map
+		if ( not _planet.normalMap )
 		{
 			_planet.normalMap = _frameGraph->CreateImage( ImageDesc{ EImage::TexCube, uint3{face_size}, EPixelFormat::RGBA16F,
 																	 EImageUsage::Storage | EImageUsage::Transfer | EImageUsage::Sampled, 6_layer },
@@ -105,6 +97,7 @@ namespace {
 		}
 
 		// create color map
+		if ( not _planet.dbgColorMap )
 		{
 			_planet.dbgColorMap = _frameGraph->CreateImage( ImageDesc{ EImage::TexCube, uint3(4,4,1), EPixelFormat::RGBA8_UNorm,
 																	   EImageUsage::TransferDst | EImageUsage::Sampled, 6_layer },
@@ -117,13 +110,15 @@ namespace {
 		}
 
 		// create uniform buffer
+		if ( not _planet.ubuffer )
 		{
 			_planet.ubuffer = _frameGraph->CreateBuffer( BufferDesc{ SizeOf<PlanetData>, EBufferUsage::Uniform | EBufferUsage::TransferDst },
 														 Default, "Planet.UB" );
 			CHECK_ERR( _planet.ubuffer );
 		}
 
-		// create pipeline and descriptor set
+		// create pipeline
+		if ( not _planet.pipeline )
 		{
 			const String			shader = _LoadShader( "shaders/planet.glsl" );
 			GraphicsPipelineDesc	ppln;
@@ -135,7 +130,10 @@ namespace {
 
 			_planet.pipeline = _frameGraph->CreatePipeline( ppln );
 			CHECK_ERR( _planet.pipeline );
+		}
 
+		// setup descriptor set
+		{
 			CHECK_ERR( _frameGraph->InitPipelineResources( _planet.pipeline, DescriptorSetID{"0"}, OUT _planet.resources ));
 
 			_planet.resources.BindBuffer( UniformID{"un_PlanetData"}, _planet.ubuffer );
@@ -162,7 +160,8 @@ namespace {
 						);
 
 		CPipelineID	gen_height_ppln = _frameGraph->CreatePipeline( desc );
-		CHECK_ERR( gen_height_ppln );
+		if ( not gen_height_ppln )
+			return false;
 
 		PipelineResources	ppln_res;
 		CHECK_ERR( _frameGraph->InitPipelineResources( gen_height_ppln, DescriptorSetID{"0"}, OUT ppln_res ));
@@ -282,11 +281,28 @@ namespace {
 			planet_data.lightDirection	= normalize(vec3( 0.0f, -1.0f, 0.0f ));
 		}
 
+		// generate
+		CommandBuffer	gen_cmdbuf;
+
+		if ( _recreatePlanet )
+		{
+			gen_cmdbuf = _frameGraph->Begin( CommandBufferDesc{ EQueueType::Graphics });
+
+			_recreatePlanet = false;
+		
+			CHECK_ERR( _CreatePlanet( gen_cmdbuf ));
+			CHECK( _GenerateHeightMap( gen_cmdbuf ));
+			CHECK_ERR( _frameGraph->Execute( gen_cmdbuf ));
+		}
+
 		// draw
 		{
 			CommandBuffer	cmdbuf		= _frameGraph->Begin( CommandBufferDesc{ EQueueType::Graphics });
 			RawImageID		sw_image	= cmdbuf->GetSwapchainImage( GetSwapchain() );
 			uint2			sw_dim		= _frameGraph->GetDescription( sw_image ).dimension.xy();
+
+			if ( gen_cmdbuf )
+				cmdbuf->AddDependency( gen_cmdbuf );
 
 			LogicalPassID	pass_id		= cmdbuf->CreateRenderPass( RenderPassDesc{ sw_dim }
 												.AddViewport( sw_dim )
@@ -342,6 +358,8 @@ namespace {
 		if ( action == EKeyAction::Down )
 		{
 			//if ( key == "right mb" )	_AddDecal( GetMousePos(), 0.1f );
+
+			if ( key == "R" )	_recreatePlanet = true;
 		}
 	}
 

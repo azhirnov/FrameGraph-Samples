@@ -55,6 +55,8 @@ namespace FG
 
 		RawSamplerID			_linearSampler;
 
+		bool					_recreatePlanet	= true;
+
 		
 	// methods
 	public:
