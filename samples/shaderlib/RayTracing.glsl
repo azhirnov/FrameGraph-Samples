@@ -50,7 +50,7 @@ Ray		Ray_FromScreen (const float3 origin, const quat rotation, const float fovX,
 
 	Ray	ray;
 	ray.origin	= origin;
-	ray.dir		= Normalize( QMul( rotation, Normalize( float3(uv.x, 1.0, uv.y) ) ) );
+	ray.dir		= Normalize( QMul( rotation, Normalize( float3(uv.x, -uv.y, -0.5) )));
 	ray.pos		= origin + ray.dir * nearPlane;
 	ray.t		= nearPlane;
 

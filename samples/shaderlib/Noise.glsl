@@ -117,9 +117,9 @@ float IQNoise (sampler2D rgbaNoise, const float3 pos, float u, float v)
 	
 	float va = 0.0;
 	float wt = 0.0;
-	for (int z = -2; z <= 2; ++z)
-	for (int y = -2; y <= 2; ++y)
-	for (int x = -2; x <= 2; ++x)
+	[[unroll]] for (int z = -2; z <= 2; ++z)
+	[[unroll]] for (int y = -2; y <= 2; ++y)
+	[[unroll]] for (int x = -2; x <= 2; ++x)
 	{
 		float3 g = float3( float(x),float(y), float(z) );
 		float3 o = hash( p + g ) * float3(u,u,1.0);
@@ -148,9 +148,9 @@ float IQNoise (const float3 pos, float u, float v)
 	
 	float va = 0.0;
 	float wt = 0.0;
-	for (int z = -2; z <= 2; ++z)
-	for (int y = -2; y <= 2; ++y)
-	for (int x = -2; x <= 2; ++x)
+	[[unroll]] for (int z = -2; z <= 2; ++z)
+	[[unroll]] for (int y = -2; y <= 2; ++y)
+	[[unroll]] for (int x = -2; x <= 2; ++x)
 	{
 		float3 g = float3( float(x),float(y), float(z) );
 		float3 o = hash( p + g ) * float3(u,u,1.0);
@@ -169,6 +169,8 @@ float IQNoise (const float3 pos, float u, float v)
 
 float ValueNoise (sampler2D greyNoise, const float3 pos)
 {
+	// from https://www.shadertoy.com/view/4sc3z2
+	// license CC BY-NC-SA 3.0
 #	define hash( _p_ )	ToSNorm( textureLod( greyNoise, (_p_).xy * 0.01 + (_p_).z * float2(0.01723059, 0.053092949), 0.0 ).r )
 
     float3 pi = Floor(pos);
@@ -191,6 +193,8 @@ float ValueNoise (sampler2D greyNoise, const float3 pos)
 
 float ValueNoise (const float3 pos)
 {
+	// from https://www.shadertoy.com/view/4sc3z2
+	// license CC BY-NC-SA 3.0
 #	define hash( _p_ )	ToSNorm( DHash13( _p_ ))
 
     float3 pi = Floor(pos);
@@ -246,6 +250,7 @@ float PerlinNoise (sampler2D rgbaNoise, const float3 pos)
 #	undef hash
 }
 
+// range [-1..1]
 float PerlinNoise (const float3 pos)
 {
 	// from https://www.shadertoy.com/view/4sc3z2
@@ -280,6 +285,7 @@ float PerlinNoise (const float3 pos)
 //-----------------------------------------------------------------------------
 
 
+// range [-1..1]
 float PerlinFBM (in float3 pos, const float lacunarity, const float persistence, const int octaveCount)
 {
 	float	value	= 0.0;
@@ -294,6 +300,26 @@ float PerlinFBM (in float3 pos, const float lacunarity, const float persistence,
 	return value;
 }
 
+// range [-1..1]
+float PerlinFBM2 (in float3 pos, const float lacunarity, const float persistence, const int octaveCount)
+{
+	float3x3 rot = float3x3( 0.00,  0.80,  0.60,
+						    -0.80,  0.36, -0.48,
+						    -0.60, -0.48,  0.64 );
+
+	float	value	= 0.0;
+	float	pers	= 1.0;
+	
+	for (int octave = 0; octave < octaveCount; ++octave)
+	{
+		value += PerlinNoise( pos ) * pers;
+		pos    = rot * pos * lacunarity;
+		pers  *= persistence;
+	}
+	return value;
+}
+
+// range [-1..1]
 float3 Turbulence (const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount)
 {
 	const float3 p0 = pos + float3( 12414.0, 65124.0, 31337.0 ) / 65536.0;
@@ -366,6 +392,94 @@ float SimplexNoise (const float3 pos)
 
 
 // range [0..inf]
+float3  Voronoi (const float2 coord, const float seed)
+{
+	float2	ipoint	= Floor( coord );
+	float2	fpoint	= Fract( coord );
+	float	md		= 1.0e+10;
+	float2	center	= float2(0.0);
+
+	[[unroll]] for (int y = -1; y <= 1; ++y)
+	[[unroll]] for (int x = -1; x <= 1; ++x)
+	{
+		float2	cur = float2( x, y );
+		float2	off = DHash22( ipoint + cur + seed ) + cur - fpoint;
+		float	d   = Dot( off, off );
+		
+		if ( d < md )
+		{
+			md = Min( md, d );
+			center = ipoint + cur;
+		}
+	}
+	return float3( md, center );
+}
+
+
+// range [0..inf]
+float4  Voronoi (const float3 coord, const float seed)
+{
+	float3	ipoint	= Floor( coord );
+	float3	fpoint	= Fract( coord );
+	float	md		= 1.0e+10;
+	float3	center	= float3(0.0);
+
+	[[unroll]] for (int z = -1; z <= 1; ++z)
+	[[unroll]] for (int y = -1; y <= 1; ++y)
+	[[unroll]] for (int x = -1; x <= 1; ++x)
+	{
+		float3	cur = float3( x, y, z );
+		float3	off = DHash33( ipoint + cur + seed ) + cur - fpoint;
+		float	d   = Dot( off, off );
+		
+		if ( d < md )
+		{
+			md = Min( md, d );
+			center = ipoint + cur;
+		}
+	}
+	return float4( md, center );
+}
+//-----------------------------------------------------------------------------
+
+
+// range [0..1]
+float WarleyFBM (in float3 pos, const float lacunarity, const float persistence, const int octaveCount)
+{
+	float	value	= 0.0;
+	float	pers	= 1.0;
+	
+	for (int octave = 0; octave < octaveCount; ++octave)
+	{
+		value += (1.0 - Voronoi( pos, 0.0 ).x) * pers;
+		pos   *= lacunarity;
+		pers  *= persistence;
+	}
+	return value;
+}
+
+// range [0..1]
+float WarleyFBM2 (in float3 pos, const float lacunarity, const float persistence, const int octaveCount)
+{
+	float3x3 rot = float3x3( 0.00,  0.80,  0.60,
+						    -0.80,  0.36, -0.48,
+						    -0.60, -0.48,  0.64 );
+
+	float	value	= 0.0;
+	float	pers	= 1.0;
+	
+	for (int octave = 0; octave < octaveCount; ++octave)
+	{
+		value += (1.0 - Voronoi( pos, 0.0 ).x) * pers;
+		pos    = rot * pos * lacunarity;
+		pers  *= persistence;
+	}
+	return value;
+}
+//-----------------------------------------------------------------------------
+
+
+// range [0..inf]
 float  VoronoiContour (const float2 coord, const float seed)
 {
 	// from https://www.shadertoy.com/view/ldl3W8
@@ -411,7 +525,7 @@ float  VoronoiContour (const float2 coord, const float seed)
 
 
 // range [0..inf]
-float  VoronoiCircles (const float3 coord, const float radiusScale, const float seed)
+float  VoronoiCircles (const float2 coord, const float radiusScale, const float seed)
 {
 	// based on shader from https://www.shadertoy.com/view/ldl3W8
 	// The MIT License
@@ -419,20 +533,19 @@ float  VoronoiCircles (const float3 coord, const float radiusScale, const float 
 
 	const int radius = 1;
 	
-	float3	ipoint	= Floor( coord );
-	float3	fpoint	= Fract( coord );
+	float2	ipoint	= Floor( coord );
+	float2	fpoint	= Fract( coord );
 	
-	float3	icenter	= float3(0.0);
+	float2	icenter	= float2(0.0);
 	float	md		= 2147483647.0;
 	float	mr		= 2147483647.0;
 	
 	// find nearest circle
-	[[unroll]] for (int z = -1; z <= 1; ++z)
 	[[unroll]] for (int y = -1; y <= 1; ++y)
 	[[unroll]] for (int x = -1; x <= 1; ++x)
 	{
-		float3	cur	= float3(x, y, z);
-		float3	off	= DHash33( cur + ipoint + seed ) + cur - fpoint;
+		float2	cur	= float2(x, y);
+		float2	off	= DHash22( cur + ipoint + seed ) + cur - fpoint;
 		float	d	= Dot( off, off );
 
 		if ( d < md )
@@ -443,15 +556,14 @@ float  VoronoiCircles (const float3 coord, const float radiusScale, const float 
 	}
 	
 	// calc circle radius
-	[[unroll]] for (int z = -2; z <= 2; ++z)
 	[[unroll]] for (int y = -2; y <= 2; ++y)
 	[[unroll]] for (int x = -2; x <= 2; ++x)
 	{
-		if ( AllEqual( int3(x,y,z), int3(0) ))
+		if ( AllEqual( int2(x,y), int2(0) ))
 			continue;
 		
-		float3	cur = icenter + float3(x, y, z);
-		float3	off	= DHash33( cur + ipoint + seed ) + cur - fpoint;
+		float2	cur = icenter + float2(x, y);
+		float2	off	= DHash22( cur + ipoint + seed ) + cur - fpoint;
 		float	d	= Dot( off, off );
 		
 		if ( d < mr )

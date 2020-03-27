@@ -93,11 +93,11 @@
 #define OUT
 #define INOUT
 
-#define Less					lessThan
-#define Greater					greaterThan
-#define LessEqual				lessThanEqual
-#define GreaterEqual			greaterThanEqual
-#define Not						not
+#define Less			lessThan
+#define Greater			greaterThan
+#define LessEqual		lessThanEqual
+#define GreaterEqual	greaterThanEqual
+#define Not				not
 
 bool  Equals (const float  lhs, const float  rhs)  { return lhs == rhs; }
 bool2 Equals (const float2 lhs, const float2 rhs)  { return equal( lhs, rhs ); }
@@ -140,10 +140,15 @@ bool4 Equals (const double4 lhs, const double4 rhs)  { return equal( lhs, rhs );
 #define NotAllEqual( a, b )		!All( Equals( (a), (b) ))
 #define NotAnyEqual( a, b )		!Any( Equals( (a), (b) ))
 
+#define Min3( a, b, c )			Min( Min( (a), (b) ), (c) )
+#define Min4( a, b, c, d )		Min( Min( (a), (b) ), Min( (c), (d) ))
+#define Max3( a, b, c )			Max( Max( (a), (b) ), (c) )
+#define Max4( a, b, c, d )		Max( Max( (a), (b) ), Max( (c), (d) ))
 
-float Epsilon ()	{ return 0.00001f; }
-float Pi ()			{ return 3.14159265358979323846f; }
-float Pi2 ()		{ return Pi() * 2.0; }
+
+float  Epsilon ()	{ return 0.00001f; }
+float  Pi ()		{ return 3.14159265358979323846f; }
+float  Pi2 ()		{ return Pi() * 2.0; }
 
 
 float  Sign (const float x)  { return  x < 0.0 ? -1.0 : 1.0; }
@@ -154,22 +159,22 @@ float2  SinCos (const float x)  { return float2(sin(x), cos(x)); }
 
 
 //-----------------------------------------------------------------------------
-// square
+// Square
 
-float  Square (const float x)   { return x * x; }
-float2 Square (const float2 x)  { return x * x; }
-float3 Square (const float3 x)  { return x * x; }
-float4 Square (const float4 x)  { return x * x; }
+float  Square (const float x)	{ return x * x; }
+float2 Square (const float2 x)	{ return x * x; }
+float3 Square (const float3 x)	{ return x * x; }
+float4 Square (const float4 x)	{ return x * x; }
 
-int  Square (const int x)	  { return x * x; }
-int2 Square (const int2 x)    { return x * x; }
-int3 Square (const int3 x)    { return x * x; }
-int4 Square (const int4 x)    { return x * x; }
+int   Square (const int x)		{ return x * x; }
+int2  Square (const int2 x)		{ return x * x; }
+int3  Square (const int3 x)		{ return x * x; }
+int4  Square (const int4 x)		{ return x * x; }
 
-uint  Square (const uint x)   { return x * x; }
-uint2 Square (const uint2 x)  { return x * x; }
-uint3 Square (const uint3 x)  { return x * x; }
-uint4 Square (const uint4 x)  { return x * x; }
+uint  Square (const uint x)		{ return x * x; }
+uint2 Square (const uint2 x)	{ return x * x; }
+uint3 Square (const uint3 x)	{ return x * x; }
+uint4 Square (const uint4 x)	{ return x * x; }
 
 
 //-----------------------------------------------------------------------------
@@ -197,6 +202,42 @@ int ClampOut (const int x, const int minVal, const int maxVal)
 	return x < mid ? (x < minVal ? x : minVal) : (x > maxVal ? x : maxVal);
 }
 
+float2 ClampOut (const float2 v, const float minVal, const float maxVal) {
+	return float2( ClampOut( v.x, minVal, maxVal ),
+				   ClampOut( v.y, minVal, maxVal ));
+}
+
+float3 ClampOut (const float3 v, const float minVal, const float maxVal) {
+	return float3( ClampOut( v.x, minVal, maxVal ),
+				   ClampOut( v.y, minVal, maxVal ),
+				   ClampOut( v.z, minVal, maxVal ));
+}
+
+float4 ClampOut (const float4 v, const float minVal, const float maxVal) {
+	return float4( ClampOut( v.x, minVal, maxVal ),
+				   ClampOut( v.y, minVal, maxVal ),
+				   ClampOut( v.z, minVal, maxVal ),
+				   ClampOut( v.w, minVal, maxVal ));
+}
+
+int2 ClampOut (const int2 v, const float minVal, const float maxVal) {
+	return int2( ClampOut( v.x, minVal, maxVal ),
+				 ClampOut( v.y, minVal, maxVal ));
+}
+
+int3 ClampOut (const int3 v, const float minVal, const float maxVal) {
+	return int3( ClampOut( v.x, minVal, maxVal ),
+				 ClampOut( v.y, minVal, maxVal ),
+				 ClampOut( v.z, minVal, maxVal ));
+}
+
+int4 ClampOut (const int4 v, const float minVal, const float maxVal) {
+	return int4( ClampOut( v.x, minVal, maxVal ),
+				 ClampOut( v.y, minVal, maxVal ),
+				 ClampOut( v.z, minVal, maxVal ),
+				 ClampOut( v.w, minVal, maxVal ));
+}
+
 
 float Wrap (const float x, const float minVal, const float maxVal)
 {
@@ -214,6 +255,42 @@ int Wrap (const int x, const int minVal, const int maxVal)
 	int res = minVal + ((x - minVal) % size);
 	if ( res < minVal ) return res + size;
 	return res;
+}
+
+float2 Wrap (const float2 v, const float minVal, const float maxVal) {
+	return float2( Wrap( v.x, minVal, maxVal ),
+				   Wrap( v.y, minVal, maxVal ));
+}
+
+float3 Wrap (const float3 v, const float minVal, const float maxVal) {
+	return float3( Wrap( v.x, minVal, maxVal ),
+				   Wrap( v.y, minVal, maxVal ),
+				   Wrap( v.z, minVal, maxVal ));
+}
+
+float4 Wrap (const float4 v, const float minVal, const float maxVal) {
+	return float4( Wrap( v.x, minVal, maxVal ),
+				   Wrap( v.y, minVal, maxVal ),
+				   Wrap( v.z, minVal, maxVal ),
+				   Wrap( v.w, minVal, maxVal ));
+}
+
+int2 Wrap (const int2 v, const float minVal, const float maxVal) {
+	return int2( Wrap( v.x, minVal, maxVal ),
+				 Wrap( v.y, minVal, maxVal ));
+}
+
+int3 Wrap (const int3 v, const float minVal, const float maxVal) {
+	return int3( Wrap( v.x, minVal, maxVal ),
+				 Wrap( v.y, minVal, maxVal ),
+				 Wrap( v.z, minVal, maxVal ));
+}
+
+int4 Wrap (const int4 v, const float minVal, const float maxVal) {
+	return int4( Wrap( v.x, minVal, maxVal ),
+				 Wrap( v.y, minVal, maxVal ),
+				 Wrap( v.z, minVal, maxVal ),
+				 Wrap( v.w, minVal, maxVal ));
 }
 
 
@@ -270,3 +347,9 @@ float   Remap (const float2 src, const float2 dst, const float  x)  { return (x 
 float2  Remap (const float2 src, const float2 dst, const float2 x)  { return (x - src.x) / (src.y - src.x) * (dst.y - dst.x) + dst.x; }
 float3  Remap (const float2 src, const float2 dst, const float3 x)  { return (x - src.x) / (src.y - src.x) * (dst.y - dst.x) + dst.x; }
 float4  Remap (const float2 src, const float2 dst, const float4 x)  { return (x - src.x) / (src.y - src.x) * (dst.y - dst.x) + dst.x; }
+
+// map 'x' in 'src' interval to 'dst' interval and clamp
+float   RemapClamped (const float2 src, const float2 dst, const float  x)  { return Clamp( Remap( src, dst, x ), dst.x, dst.y ); }
+float2  RemapClamped (const float2 src, const float2 dst, const float2 x)  { return Clamp( Remap( src, dst, x ), dst.x, dst.y ); }
+float3  RemapClamped (const float2 src, const float2 dst, const float3 x)  { return Clamp( Remap( src, dst, x ), dst.x, dst.y ); }
+float4  RemapClamped (const float2 src, const float2 dst, const float4 x)  { return Clamp( Remap( src, dst, x ), dst.x, dst.y ); }

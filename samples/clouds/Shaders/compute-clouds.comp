@@ -1,0 +1,502 @@
+
+precision highp float;
+
+layout (local_size_x_id = 0, local_size_y_id = 1, local_size_z = 1) in;
+
+layout (set = 0, binding = 0, rgba32f) uniform writeonly image2D resultImage;
+
+layout(set = 1, binding = 0) uniform UniformCameraObject {
+    mat4 view;
+    mat4 proj;
+    vec4 cameraPosition;
+    vec4 cameraParams;
+} camera;
+
+layout(set = 1, binding = 1) uniform UniformCameraObjectPrev {
+    mat4 view;
+    mat4 proj;
+    vec4 cameraPosition;
+} cameraPrev;
+
+// all of these components are calculated in SkyManager.h/.cpp
+layout(set = 1, binding = 2) uniform UniformSunObject { 
+    vec4 location;
+    vec4 direction;
+    vec4 color;
+    mat4 directionBasis;
+    float intensity;
+} sun;
+
+// note: a lot of sky constants are stored/precalculated in SkyManager.h / .cpp
+layout(set = 1, binding = 3) uniform UniformSkyObject {
+    
+    vec4 betaR;
+    vec4 betaV;
+    vec4 wind;
+    float mie_directional;
+} sky;
+
+layout(set = 1, binding = 4) uniform sampler2D cloudPlacement;
+layout(set = 1, binding = 5) uniform sampler2D nightSkyMap;
+layout(set = 1, binding = 6) uniform sampler2D curlNoise;
+layout(set = 1, binding = 7) uniform sampler3D lowResCloudShape;
+layout(set = 1, binding = 8) uniform sampler3D hiResCloudShape;
+
+struct Intersection {
+    vec3 normal;
+    vec3 point;
+    bool valid;
+    float t;
+};
+
+#define ATMOSPHERE_RADIUS 2000000.0
+
+#define EPSILON 0.0001
+#define PI 3.14159265
+#define E 2.718281828459
+
+#define THREE_OVER_SIXTEENPI 0.05968310365946075
+#define ONE_OVER_FOURPI 0.07957747154594767
+
+float remap(in float value, in float oldMin, in float oldMax, in float newMin, in float newMax) {
+    return newMin + (((value - oldMin) / (oldMax - oldMin)) * (newMax - newMin));
+}
+
+float remapClamped(in float value, in float oldMin, in float oldMax, in float newMin, in float newMax) {
+    return clamp(newMin + (((value - oldMin) / (oldMax - oldMin)) * (newMax - newMin)), newMin, newMax);
+}
+
+float hgPhase(in float cosTheta, in float g) {
+    float g2 = g * g;
+    float inv = 1.0 / pow(1.0 - 2.0 * g * cosTheta + g2, 1.5);
+    return ONE_OVER_FOURPI * ((1.0 - g2) * inv);
+}
+
+/// ATMOSPHERE COLOR BEGIN: adapted from open source of zz85 on Github, math from Preetham Model, initially implemented by Simon Wallner and Martin Upitis
+/// Credit applies to everything before ATMOSPHERE COLOR END
+
+#define SUN_ANGULAR_COS 0.999956676946448443553574619906976478926848692873900859324
+
+float rayleighPhase(in float cosTheta) {
+    return THREE_OVER_SIXTEENPI * (1.0 + cosTheta * cosTheta);
+}
+
+vec3 getAtmosphereColorPhysical(in vec3 dir, in vec3 sunDir) {
+    vec3 color = vec3(0);
+
+    vec3 sunPos = sun.location.xyz; 
+    float sunE = sun.intensity; 
+    vec3 BetaR = sky.betaR.xyz;   
+    vec3 BetaM = sky.betaV.xyz; 
+
+    // optical length
+    float zenith = acos(max(0.0, dir.y)); // acos?
+    float inverse = 1.0 / (cos(zenith) + 0.15 * pow(93.885 - ((zenith * 180.0) / PI), -1.253));
+    float sR = 8.4E3 * inverse;
+    float sM = 1.25E3 * inverse;
+
+    vec3 fex = exp( -BetaR * sR + BetaM * sM);
+
+    float cosTheta = dot(sunDir, dir);
+
+    float rPhase = rayleighPhase(cosTheta * 0.5 + 0.5);
+    vec3 betaRTheta = BetaR * rPhase;
+    float mPhase = hgPhase(cosTheta, sky.mie_directional);
+    vec3 betaMTheta = BetaM * mPhase;
+
+    float yDot = 1.0 - sunDir.y;
+    yDot *= yDot * yDot * yDot * yDot;
+    vec3 betas = (betaRTheta + betaMTheta) / (BetaR + BetaM);
+    vec3 Lin = pow(sunE * (betas) * (1.0 - fex), vec3(1.5));
+    Lin *= mix(vec3(1), pow(sunE * (betas) * fex, vec3(0.5)), clamp(yDot, 0.0, 1.0));
+
+    vec3 L0 = 0.1 * fex;
+
+    float sunDisk = smoothstep(SUN_ANGULAR_COS, SUN_ANGULAR_COS + 0.00002, cosTheta);
+    sunDisk = 0;
+    L0 += (sunE * 15000.0 * fex) * sunDisk;
+
+    color = (Lin + L0) * 0.04 + vec3(0.0, 0.0003, 0.00075);
+
+    // return color in HDR space
+    return color;
+}
+
+vec3 getAtmosphereColor(in vec3 dir) {
+    // TODO: physical algorithm
+    vec3 up = mix(vec3(0.3, 0.7, 1.0), vec3(0.15, 0.65, 0.9), dir.y);
+    vec3 down = vec3(0.8, 0.9, 1.0);
+    float y = dir.y;
+    y = smoothstep(0, 1, clamp(remap(y, 0, 0.1, 0, 1), 0, 1));
+    return mix(down, up, y);
+}
+
+
+/// ATMOSPHERE COLOR END: see credit at BEGIN
+
+vec3 NightSkyColor( in vec2 uv ) {
+    return texture(nightSkyMap, uv).xyz;
+}
+
+
+// Compute sphere intersection
+Intersection raySphereIntersection(in vec3 ro, in vec3 rd, in vec4 sphere) {
+	Intersection isect;
+    isect.valid = false;
+    isect.point = vec3(0);
+    isect.normal = vec3(0, 1, 0);
+    
+    // no rotation, only uniform scale, always a sphere
+    ro -= sphere.xyz;
+    ro /= sphere.w;
+    
+    float A = dot(rd, rd);
+    float B = 2.0 * dot(rd, ro);
+    float C = dot(ro, ro) - 0.25;
+    float discriminant = B * B - 4.0 * A * C;
+    
+    if (discriminant < 0.0) return isect;
+    float t = (-sqrt(discriminant) - B) / A * 0.5;
+    if (t < 0.0) t = (sqrt(discriminant) - B) / A * 0.5;
+    
+    if (t >= 0.0) {
+        isect.valid = true;
+    	vec3 p = vec3(ro + rd * t);
+        isect.normal = normalize(p);
+        p *= sphere.w;
+        p += sphere.xyz;
+        isect.point = p;
+        isect.t = length(p - ro);
+    }
+    
+    return isect;
+}
+
+// Get the point projected to the inner atmosphere shell
+vec3 getProjectedShellPoint(in vec3 pt, in vec3 center) {
+    return 0.5 * ATMOSPHERE_RADIUS * normalize(pt - center) + center;
+}
+
+// Given a point, the point projected to the inner atmosphere shell, and the thickness of the shell
+// return the normalized height within the shell.
+float getRelativeHeight(in vec3 pt, in vec3 projectedPt, in float thickness) {
+    return clamp(length(pt - projectedPt) / thickness, 0.0, 1.0);
+}
+
+// Get the blended density gradient for 3 different cloud types
+// relativeHeight is normalized distance from inner to outer atmosphere shell
+// cloudType is read from cloud placement blue channel
+float cloudLayerDensity(float relativeHeight, float cloudType) {
+    relativeHeight = clamp(relativeHeight, 0, 1);
+    
+    float cumulus = max(0.0, remap(relativeHeight, 0.0, 0.2, 0.0, 1.0) * remap(relativeHeight, 0.7, 0.9, 1.0, 0.0));
+    float stratocumulus = max(0.0, remap(relativeHeight, 0.0, 0.2, 0.0, 1.0) * remap(relativeHeight, 0.2, 0.7, 1.0, 0.0)); 
+    float stratus = max(0.0, remap(relativeHeight, 0.0, 0.1, 0.0, 1.0) * remap(relativeHeight, 0.2, 0.3, 1.0, 0.0)); 
+
+    float d1 = mix(stratus, stratocumulus, clamp(cloudType * 2.0, 0.0, 1.0));
+    float d2 = mix(stratocumulus, cumulus, clamp((cloudType - 0.5) * 2.0, 0.0, 1.0));
+    return mix(d1, d2, cloudType);
+    
+}
+
+float heightBiasCoverage(float coverage, float height) {
+    return pow(coverage, clamp(remap(height, 0.7, 0.8, 1.0, 0.8), 0.8, 1.0));
+}
+
+float erodeBlend(float x, float newMin) {
+    return max(0.0, remap(x, newMin, 1.0, 0.0, 1.0));
+}
+
+float cloudHiRes(in vec3 pos, in float curlStrength, in float origDensity, in float relativeHeight) {
+    // TODO: curlNoise
+    
+    float c = 0.0001; //?
+    vec3 curl = texture(curlNoise, c * pos.xz).xyz;
+
+    curl = 2.0 * curl - 1.0;
+    pos += 1.9 * curlStrength * curl;
+
+    vec4 densityNoise = texture(hiResCloudShape, 0.0004 * pos);
+    float erosion = 0.625 * densityNoise.r + 0.25 * densityNoise.g + 0.125 * densityNoise.b;
+
+    erosion = mix(erosion, 1.0 - erosion, clamp(relativeHeight * 10.0, 0.0, 1.0));
+    return remapClamped(origDensity, 1.0 * erosion, 1.0, 0.0, 1.0);
+}
+
+// Checks if a cloud is at this point. If not, return 0 immediately. Otherwise get low-res density. (can still be 0 given cloud coverage)
+float cloudTest(in vec3 pos, in float relativeHeight, in vec3 earthCenter, inout float coverage) {
+
+    float density;
+
+    vec3 currentProj = getProjectedShellPoint(pos, earthCenter);
+    vec3 cloudInfo = texture(cloudPlacement, 0.000009 * (currentProj.xz - camera.cameraPosition.xz)).xyz;
+    float layerDensity = cloudLayerDensity(relativeHeight, cloudInfo.b);
+    vec4 densityNoise = texture(lowResCloudShape, 0.00002 * vec3(pos));
+
+    density = layerDensity * remapClamped(densityNoise.x, 0.3, 1.0, 0.0, 1.0);
+    coverage = 0.0;
+    // early check before more expensive math
+    if (density < 0.0001) return 0.0;
+
+    coverage = heightBiasCoverage(relativeHeight, min(0.85, cloudInfo.r));
+
+    float erosion = 0.625 * densityNoise.y + 0.25 * densityNoise.z + 0.125 * densityNoise.w;
+    erosion = remapClamped(erosion, coverage, 1.0, 0.0, 1.0);
+    //density = remapClamped(density, 1.0 - coverage, 1.0, 0.0, 1.0);
+    density = remapClamped(density, erosion, 1.0, 0.0, 1.0);
+
+    return density;
+}
+
+// Code taken from camera.cpp
+mat3 fromAngleAxis( in vec3 angle, in float angleRad ) {
+    float cost = cos(angleRad);
+    float sint = sin(angleRad);
+
+    mat3 rot;
+    rot[0] = vec3(
+        cost + angle.x * angle.x * (1.f - cost),
+        angle.y * angle.x * (1.f - cost) + angle.z * sint,
+        angle.z * angle.x * (1.f - cost) - angle.y * sint
+        );
+    rot[1] = vec3(
+        angle.x * angle.y * (1.f - cost) - angle.z * sint,
+        cost + angle.y * angle.y * (1.f - cost),
+        angle.z * angle.y * (1.f - cost) + angle.x * sint
+        );
+    rot[2] = vec3(
+        angle.x * angle.z * (1.f - cost) + angle.y * sint,
+        angle.y * angle.z * (1.f - cost) - angle.x * sint,
+        cost + angle.z * angle.z * (1.f - cost)
+        );
+    return rot;
+}
+
+#define WIND_STRENGTH 20.0
+
+// temp
+//#define WIDTH 1280
+#define WIDTH 1920
+//#define HEIGHT 720
+#define HEIGHT 1080
+#define MAX_STEPS 100
+
+void main()
+{
+#ifdef REPROJECTION
+    // Only update every 16th pixel
+    int pxOffset = int(sun.color.a);
+    
+    int pxO_x = pxOffset % 4;
+    int pxO_y = pxOffset / 4;
+
+    uint pxTargetX = gl_GlobalInvocationID.x * 4 + pxO_x;
+    uint pxTargetY = gl_GlobalInvocationID.y * 4 + pxO_y;
+
+    if (pxTargetX >= WIDTH || pxTargetY >= HEIGHT) return;
+
+#else
+    uint pxTargetX = gl_GlobalInvocationID.x;
+    uint pxTargetY = gl_GlobalInvocationID.y;
+#endif
+    
+    float timeOffset = sky.wind.w;
+
+    /// Extract the UV
+    ivec2 dim = imageSize(resultImage); 
+	vec2 uv = vec2(pxTargetX, pxTargetY) / vec2(WIDTH, HEIGHT);
+     
+    /// Cast a ray
+    // Compute screen space point from UVs
+    vec2 screenPoint = uv * 2.0 - 1.0;
+
+    // Extract camera information from uniform
+    vec3 camLook = vec3(camera.view[0][2], camera.view[1][2], camera.view[2][2]);
+    vec3 camRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
+    vec3 camUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
+
+    // Compute ray direction
+    const vec3 cameraPos = camera.cameraPosition.xyz;
+    vec3 refPoint = cameraPos - camLook;
+
+    vec3 p = refPoint + camera.cameraParams.x * screenPoint.x * camera.cameraParams.y * camRight - screenPoint.y * camera.cameraParams.y * camUp;
+
+    vec3 rayDirection = normalize(p - cameraPos);
+
+    vec3 sunDir = normalize(sun.directionBasis[1].xyz);
+    
+    float dotToSun = max(0.0, dot(sunDir, rayDirection));
+    float skyAmbient = dotToSun * 0.18;
+    skyAmbient *= skyAmbient * skyAmbient;
+    float sunDisk = smoothstep(SUN_ANGULAR_COS, SUN_ANGULAR_COS + 0.00003, dotToSun);
+    // IT'S TIME
+    dotToSun *= dotToSun * dotToSun * dotToSun;
+    dotToSun *= dotToSun * dotToSun * dotToSun;
+    dotToSun *= dotToSun * dotToSun * dotToSun;
+    dotToSun *= dotToSun * dotToSun * dotToSun;
+    dotToSun *= dotToSun * dotToSun;
+    if(sun.direction.y < 0.0) {
+        dotToSun *= dotToSun * dotToSun * dotToSun * dotToSun * dotToSun * dotToSun;
+    }
+    sunDisk = max(sunDisk, dotToSun);
+    sunDisk = max(0.0, sunDisk);
+
+    vec4 finalColor = vec4(0, 0, 0, 0);
+    vec3 backgroundCol;
+    if(sun.direction.y >= 0.0) {
+        backgroundCol = getAtmosphereColorPhysical(rayDirection, sunDir);
+        finalColor.a = max(skyAmbient, sunDisk);
+        finalColor.xyz = backgroundCol;
+    }
+
+    // It is likely we will never have an entirely unobstructed view of the horizon, so kill rays that would otherwise be executing.
+    if(dot(rayDirection, vec3(0, 1, 0)) < 0.0) {
+        imageStore(resultImage, ivec2(pxTargetX, pxTargetY), finalColor);
+        return;
+    }
+
+    /// Raytrace the scene (a sphere, to become the atmosphere)
+    vec3 earthCenter = cameraPos;
+    earthCenter.y = -ATMOSPHERE_RADIUS * 0.5 * 0.995;
+    vec4 atmosphereSphereInner = vec4(earthCenter, ATMOSPHERE_RADIUS);
+    float atmosphereThickness = 0.5 * ATMOSPHERE_RADIUS * 0.02;
+    vec4 atmosphereSphereOuter = vec4(earthCenter, ATMOSPHERE_RADIUS * 1.02);
+    Intersection atmosphereIsectInner = raySphereIntersection(cameraPos, rayDirection, atmosphereSphereInner);
+    Intersection atmosphereIsectOuter = raySphereIntersection(cameraPos, rayDirection, atmosphereSphereOuter);
+
+    if(sun.direction.y < 0.0) {
+        // The sky should appear to rotate as the earth rotates
+        // Create a rotation matrix from scratch
+        // For now, just rotate an amount based on sun.direction.y.
+        mat3 rot = fromAngleAxis(normalize(vec3(1.0, 0.0, 1.0)), sun.direction.y * 0.5);
+        vec3 rotatedRayDir = rot * rayDirection;
+        vec3 rotatedRayOrigin = rot * cameraPos;
+        vec3 point = atmosphereIsectOuter.t * rotatedRayDir + rotatedRayOrigin;
+        vec3 projectedPoint = getProjectedShellPoint(point, earthCenter);
+        vec2 uv = 0.00002 * (projectedPoint.xz - cameraPos.xz) + 0.35; // magic numberz 
+        backgroundCol = NightSkyColor(uv);
+        backgroundCol *= sqrt(backgroundCol) * 0.75;
+        backgroundCol = pow(backgroundCol, vec3(2.2));
+        backgroundCol *= 10.0;
+        float falloff = pow(rayDirection.y, 6.0);
+        backgroundCol *= falloff;
+        backgroundCol = mix(vec3(0.3, 0.6, 4.0) * 0.05, backgroundCol, pow(rayDirection.y, 0.03125));
+        backgroundCol += sunDisk;
+        finalColor.a = sunDisk;
+    }
+
+    float cosTheta = dot(rayDirection, sunDir);
+    float t;
+    float accumDensity = 0.0;
+    float transmittance = 1.0;
+    float stepSize = 0.05 * atmosphereThickness;
+
+    mat3 basis = mat3(sun.directionBasis);
+    vec3 samples[6] = {
+        basis * vec3(0, 0.6, 0),
+        basis * vec3(0, 0.5, 0.05),
+        basis * vec3(0.1, 0.75, 0),
+        basis * vec3(0.2, 2.5, 0.3),
+        basis * vec3(0, 6, 0),
+        basis * vec3(-0.1, 1, -0.2)
+        
+    };
+
+    bool noHits = true;
+    int misses = 0;
+    int steps = 0;
+
+    float henyeyGreenstein = max(hgPhase(cosTheta, 0.6), 0.7 * hgPhase(cosTheta, 0.99 - 0.1));
+    for(float t = atmosphereIsectInner.t; t < atmosphereIsectOuter.t; t += stepSize) {
+        vec3 currentPos = cameraPos + t * rayDirection;
+       
+        float coverage;
+        vec3 currentProj = getProjectedShellPoint(currentPos, earthCenter);
+        float rHeight = getRelativeHeight(currentPos, currentProj, atmosphereThickness);
+        vec3 windOffset = WIND_STRENGTH * (sky.wind.xyz + rHeight *vec3(0.1, 0.05, 0)) * (timeOffset + rHeight * 200.0);
+
+        //vec3 curl = texture(curlNoise, 0.0003 * currentProj.xz).xyz;
+
+        //curl = 2.0 * curl - 1.0;
+        //currentPos += 0.3 * stepSize * curl;
+
+        float density = cloudTest(currentPos + windOffset, rHeight, earthCenter, coverage);
+
+        float loDensity = density;
+            
+
+        if (density > 0.0) {
+            misses = 0;
+            if (noHits) {
+                //start high-resolution march
+                t -= stepSize;
+                stepSize *= 0.3;
+                noHits = false;
+                continue; // go back half a step
+            }
+
+            density = cloudHiRes(currentPos + windOffset, stepSize, density, rHeight);
+            if (density < 0.0001) continue;
+            float densityAlongLight = 0.0;
+
+            // Sample light propogation for Beer's law in a cone towards the light
+            for (int i = 0; i < 6; i++) {
+                vec3 lsPos = currentPos + 3.0 * stepSize * samples[i];
+                vec3 lsProj = getProjectedShellPoint(lsPos, earthCenter);
+                float lsHeight = getRelativeHeight(lsPos, lsProj, atmosphereThickness);
+                windOffset = WIND_STRENGTH * (sky.wind.xyz + lsHeight * vec3(0.1, 0.05, 0)) * (timeOffset + lsHeight * 200.0);
+
+                float lsDensity = cloudTest(lsPos + windOffset, lsHeight, earthCenter, coverage);
+
+                if (lsDensity > 0.0) {
+                    lsDensity = cloudHiRes(lsPos + windOffset, stepSize, lsDensity, lsHeight);
+                    densityAlongLight += lsDensity;
+                }
+            }
+        
+            // Beer's Law with extra / artistic light penetration, blend with front-to-back opacity     
+            float beersLaw = exp(-densityAlongLight);
+            // HG makes far clouds too dark, clouds away from sun dir need extra scattering
+            float beersModulated = max(beersLaw, 0.7 * exp(-0.25 * densityAlongLight));
+
+            beersLaw = mix(beersLaw, beersModulated, -cosTheta * 0.5 + 0.5);
+            float inScatter = 0.09 + pow(loDensity, remapClamped(rHeight, 0.3, 0.85, 0.5, 2.0));
+            inScatter *= pow(remapClamped(rHeight, 0.07, 0.34, 0.1, 1.0), 0.8);
+            //inScatter = loDensity * loDensity;
+            transmittance = mix(transmittance, inScatter * henyeyGreenstein * beersLaw , (1.0 - accumDensity));
+
+            accumDensity += density;
+
+        } else if (!noHits) {
+            misses++;
+            if (misses >= 10) {
+                noHits = true; // revert to low resolution marching
+                stepSize /= 0.3;
+            }
+        }
+           
+        if(accumDensity > 0.99) {
+            accumDensity = 1.0;
+            break;
+        }
+
+        if (++steps > MAX_STEPS) break;
+    }
+
+    // opacity fades to prevent hard cutoff at horizon
+    accumDensity *= smoothstep(0, 1, min(1, remap(rayDirection.y, 0, 0.1, 0, 1)));
+    accumDensity = min(accumDensity, 0.999);
+
+    vec3 cloudColor;
+    if(sun.direction.y >= 0.0) {
+        cloudColor = sun.color.xyz * (sun.intensity * vec3(max(0.0, transmittance)) + 0.08 * backgroundCol * exp(-transmittance));
+    } else {
+        cloudColor = sun.color.xyz * (sun.intensity * vec3(max(0.0, transmittance)) + 0.08 * (vec3(0.3, 0.6, 4.0) * 0.05 * pow(rayDirection.y, 0.03125)) * exp(-transmittance));
+    }
+
+    finalColor.rgb = mix(backgroundCol, cloudColor, accumDensity);
+    finalColor.a *= max(1.0 - accumDensity, 0.0);
+
+
+    imageStore(resultImage, ivec2(pxTargetX, pxTargetY), finalColor);
+}
