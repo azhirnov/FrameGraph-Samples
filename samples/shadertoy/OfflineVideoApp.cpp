@@ -59,24 +59,21 @@ namespace FG
 			RETURN_ERR( "no video recorder!" );
 		#endif
 
-		if ( _videoRecorder )
-		{
-			IVideoRecorder::Config		cfg;
-			cfg.format		= EVideoFormat::YUV_420P;
-			cfg.codec		= EVideoCodec::H264;
-			cfg.preferGPU	= true;
-			cfg.preset		= EVideoPreset::Slow;
-			cfg.bitrate		= _config.bitrate;
-			cfg.fps			= _config.fps;
-			cfg.size		= _config.imageSize;
-
-			CHECK( _videoRecorder->Begin( cfg, videoName ));
-		}
-
-		_videoName	= videoName;
 		_maxFrames	= maxFrames;
 		shader( _view.get() );
 
+		IVideoRecorder::Config	cfg;
+		cfg.format		= EVideoFormat::YUV420P;
+		cfg.codec		= EVideoCodec::H264;
+		cfg.hwAccelerated= false;
+		cfg.preset		= EVideoPreset::UltraFast;
+		cfg.bitrate		= _config.bitrate;
+		cfg.fps			= _config.fps;
+		cfg.size		= _config.imageSize;
+		
+		_videoName		= String{videoName} << _videoRecorder->GetExtension( cfg.codec );
+
+		CHECK_ERR( _videoRecorder->Begin( cfg, _videoName ));
 		return true;
 	}
 
@@ -160,7 +157,6 @@ namespace FG
 		}
 
 		_SetLastCommandBuffer( cmdbuf );
-
 		return true;
 	}
 

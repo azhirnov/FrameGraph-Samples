@@ -100,7 +100,7 @@ namespace FG
 			cfg.windowTitle			= "Shadertoy";
 			cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib", FG_DATA_PATH };
 			cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
-			//cfg.vrMode			= AppConfig::EVRMode::Emulator;
+			//cfg.vrMode				= AppConfig::EVRMode::Emulator;
 			//cfg.enableDebugLayers	= false;
 			CHECK_ERR( _CreateFrameGraph( cfg ));
 		}
@@ -114,6 +114,7 @@ namespace FG
 
 		_ResetPosition();
 		GetFPSCamera().SetPerspective( _cameraFov, 1.0f, 0.1f, 100.0f );
+		//GetVRCamera().SetHmdOffsetScale( 0.1f );
 
 		_view->SetMode( _targetSize, _viewMode );
 		_view->SetCamera( GetFPSCamera() );
@@ -352,15 +353,17 @@ namespace FG
 			if ( _videoRecorder )
 			{
 				IVideoRecorder::Config		cfg;
-				cfg.format		= EVideoFormat::YUV_420P;
+				cfg.format		= EVideoFormat::YUV420P;
 				cfg.codec		= EVideoCodec::H264;
-				cfg.preferGPU	= true;
+				cfg.hwAccelerated= true;
 				cfg.preset		= EVideoPreset::Fast;
 				cfg.bitrate		= 7552ull << 10;
 				cfg.fps			= 30;
 				cfg.size		= _targetSize;
 
-				CHECK( _videoRecorder->Begin( cfg, "video.mp4" ));
+				String	vname	= "video"s << _videoRecorder->GetExtension( cfg.codec );
+
+				CHECK( _videoRecorder->Begin( cfg, vname ));
 			}
 		}
 	}

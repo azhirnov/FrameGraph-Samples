@@ -9,10 +9,10 @@ namespace FG
 {
 
 	//
-	// Shadertoy Offline Video Renderer
+	// Shadertoy Image Generator
 	//
 
-	class OfflineVideoApp final : public BaseSceneApp
+	class ImageGenerator final : public BaseSceneApp
 	{
 	// types
 	public:
@@ -22,12 +22,10 @@ namespace FG
 
 		struct Config
 		{
-			uint2				imageSize		= uint2{1920, 1080};
+			uint3				imageSize		= uint3{512, 512, 1};
 			EViewMode			viewMode		= EViewMode::Mono;
 			EPixelFormat		imageFormat		= EPixelFormat::RGBA8_UNorm;
 			uint				imageSamples	= 1;
-			uint				fps				= 30;
-			uint64_t			bitrate			= 10ull << 20;
 		};
 
 
@@ -36,31 +34,26 @@ namespace FG
 		UniquePtr<ShaderView>	_view;
 		
 		const Config			_config;
-		
 		uint					_frameCounter	= 0;
-		uint					_maxFrames		= 0;
-		bool					_pause			= false;
-		bool					_mirror			= true;
+		String					_imageName;
 
-		String						_videoName;
-		UniquePtr<IVideoRecorder>	_videoRecorder;
+		ImageID					_image;
 
-		static inline const Rad		_cameraFov	= 60_deg;
+		static inline const Rad	_cameraFov		= 60_deg;
 
 
 	// methods
 	public:
-		explicit OfflineVideoApp (const Config &cfg);
-		~OfflineVideoApp ();
+		explicit ImageGenerator (const Config &cfg);
+		~ImageGenerator ();
 		
-		bool  Initialize (Shader_t shader, uint maxFrames, StringView videoName);
+		bool  Initialize (Shader_t shader, StringView imageName);
 		void  Destroy ();
 
 
 	// BaseSceneApp
 	public:
 		bool  DrawScene () override;
-		void  OnUpdateFrameStat (OUT String &) const;
 
 
 	// IWindowEventListener
@@ -69,7 +62,7 @@ namespace FG
 
 
 	private:
-		void _StopRecording ();
+		bool  _SaveImage ();
 	};
 
 
