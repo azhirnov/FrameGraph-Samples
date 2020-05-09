@@ -20,7 +20,7 @@ struct Ray
 	Ray_Create
 =================================================
 */
-Ray		Ray_Create (const float3 origin, const float3 direction, const float tmin)
+Ray  Ray_Create (const float3 origin, const float3 direction, const float tmin)
 {
 	Ray	result;
 	result.origin	= origin;
@@ -37,8 +37,8 @@ Ray		Ray_Create (const float3 origin, const float3 direction, const float tmin)
 	create ray for raytracing, raymarching, ...
 =================================================
 */
-Ray		Ray_FromScreen (const float3 origin, const quat rotation, const float fovX, const float nearPlane,
-						const int2 screenSize, const int2 screenCoord)
+Ray  Ray_FromScreen (const float3 origin, const quat rotation, const float fovX, const float nearPlane,
+					 const int2 screenSize, const int2 screenCoord)
 {
 	float2	scr_size	= float2(screenSize);
 	float2	coord		= float2(screenCoord);
@@ -64,8 +64,8 @@ Ray		Ray_FromScreen (const float3 origin, const quat rotation, const float fovX,
 	create ray from frustum rays and origin
 =================================================
 */
-Ray		Ray_From (const float3 leftBottom, const float3 rightBottom, const float3 leftTop, const float3 rightTop,
-				  const float3 origin, const float nearPlane, const float2 unormCoord)
+Ray  Ray_From (const float3 leftBottom, const float3 rightBottom, const float3 leftTop, const float3 rightTop,
+			   const float3 origin, const float nearPlane, const float2 unormCoord)
 {
 	const float2 coord	= unormCoord;
 	const float3 vec	= Lerp( Lerp( leftBottom, rightBottom, coord.x ),
@@ -86,7 +86,7 @@ Ray		Ray_From (const float3 leftBottom, const float3 rightBottom, const float3 l
 	Ray_CalcX
 =================================================
 */
-float3	Ray_CalcX (const Ray ray, const float2 pointYZ)
+float3  Ray_CalcX (const Ray ray, const float2 pointYZ)
 {
 	const float	x = ray.pos.x + ray.dir.x * (pointYZ[1] - ray.pos.z) / ray.dir.z;
 
@@ -98,7 +98,7 @@ float3	Ray_CalcX (const Ray ray, const float2 pointYZ)
 	Ray_CalcY
 =================================================
 */
-float3	Ray_CalcY (const Ray ray, const float2 pointXZ)
+float3  Ray_CalcY (const Ray ray, const float2 pointXZ)
 {
 	const float	y = ray.pos.y + ray.dir.y * (pointXZ[1] - ray.pos.z) / ray.dir.z;
 
@@ -110,7 +110,7 @@ float3	Ray_CalcY (const Ray ray, const float2 pointXZ)
 	Ray_CalcZ
 =================================================
 */
-float3	Ray_CalcZ (const Ray ray, const float2 pointXY)
+float3  Ray_CalcZ (const Ray ray, const float2 pointXY)
 {
 	const float	z = ray.pos.z + ray.dir.z * (pointXY[0] - ray.pos.x) / ray.dir.x;
 
@@ -122,7 +122,7 @@ float3	Ray_CalcZ (const Ray ray, const float2 pointXY)
 	Ray_Contains
 =================================================
 */
-bool	Ray_Contains (const Ray ray, const float3 point)
+bool  Ray_Contains (const Ray ray, const float3 point)
 {
 	// z(x), z(y)
 	const float2	z = ray.pos.zz + ray.dir.zz * (point.xy - ray.pos.xy) / ray.dir.xy;
@@ -136,7 +136,7 @@ bool	Ray_Contains (const Ray ray, const float3 point)
 	Ray_Rotate
 =================================================
 */
-void	Ray_Rotate (inout Ray ray, const quat rotation)
+void  Ray_Rotate (inout Ray ray, const quat rotation)
 {
 	// ray.origin - const
 	ray.dir = Normalize( QMul( rotation, ray.dir ) );
@@ -149,7 +149,7 @@ void	Ray_Rotate (inout Ray ray, const quat rotation)
 	Ray_Move
 =================================================
 */
-void	Ray_Move (inout Ray ray, const float length)
+void  Ray_Move (inout Ray ray, const float length)
 {
 	ray.t   += length;
 	ray.pos  = ray.origin + ray.dir * ray.t;
@@ -160,7 +160,7 @@ void	Ray_Move (inout Ray ray, const float length)
 	Ray_SetLength
 =================================================
 */
-void	Ray_SetLength (inout Ray ray, const float length)
+void  Ray_SetLength (inout Ray ray, const float length)
 {
 	ray.t   = length;
 	ray.pos = ray.origin + ray.dir * length;
@@ -171,8 +171,33 @@ void	Ray_SetLength (inout Ray ray, const float length)
 	Ray_SetOrigin
 =================================================
 */
-void	Ray_SetOrigin (inout Ray ray, const float3 origin)
+void  Ray_SetOrigin (inout Ray ray, const float3 origin)
 {
 	ray.origin	= origin;
 	ray.pos		= origin + ray.dir * ray.t;
+}
+
+/*
+=================================================
+	Ray_AABBIntersection
+=================================================
+*/
+bool  Ray_AABBIntersection (const float3 rayPos, const float3 rayDir, const float3 aabbMin, const float3 aabbMax, out float2 tBeginEnd)
+{
+	// from https://gamedev.stackexchange.com/questions/18436/most-efficient-aabb-vs-ray-collision-algorithms
+
+	float3	dirfrac	= 1.0 / rayDir;
+	float3	t135	= (aabbMin - rayPos) * dirfrac;
+	float3	t246	= (aabbMax - rayPos) * dirfrac;
+	float	tmin	= Max( Max( Min(t135[0], t246[0]), Min(t135[1], t246[1])), Min(t135[2], t246[2]) );
+	float	tmax	= Min( Min( Max(t135[0], t246[0]), Max(t135[1], t246[1])), Max(t135[2], t246[2]) );
+
+	if ( tmax < 0 )
+		return false;
+
+	if ( tmin > tmax )
+		return false;
+
+	tBeginEnd = float2( tmin, tmax );
+	return true;
 }

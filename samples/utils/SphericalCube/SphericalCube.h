@@ -12,13 +12,13 @@ namespace FG
 	// Spherical Cube Projection
 	//
 
-	template <typename Projection>
+	template <typename PosProj, typename TexProj>
 	class SphericalCubeProjection
 	{
 	// types
 	public:
-		using Projection_t			= Projection;
-		using TextureProjection_t	= TextureProjection;
+		using Projection_t			= PosProj;
+		using TextureProjection_t	= TexProj;
 
 
 	// methods
@@ -44,7 +44,7 @@ namespace FG
 	// Spherical Cube
 	//
 
-	class SphericalCube final : public SphericalCubeProjection< TangentialSphericalCube >
+	class SphericalCube final : public SphericalCubeProjection< TangentialSphericalCube, TextureProjection >
 	{
 	// types
 	public:
@@ -93,14 +93,14 @@ namespace FG
 	ForwardProjection
 =================================================
 */
-	template <typename P>
-	inline double3  SphericalCubeProjection<P>::ForwardProjection (const double2 &ncoord, ECubeFace face)
+	template <typename PP, typename TP>
+	inline double3  SphericalCubeProjection<PP,TP>::ForwardProjection (const double2 &ncoord, ECubeFace face)
 	{
 		return Projection_t::Forward( ncoord, face );
 	}
 	
-	template <typename P>
-	inline float3  SphericalCubeProjection<P>::ForwardProjection (const float2 &ncoord, ECubeFace face)
+	template <typename PP, typename TP>
+	inline float3  SphericalCubeProjection<PP,TP>::ForwardProjection (const float2 &ncoord, ECubeFace face)
 	{
 		return float3(Projection_t::Forward( double2(ncoord), face ));
 	}
@@ -110,15 +110,15 @@ namespace FG
 	InverseProjection
 =================================================
 */
-	template <typename P>
-	inline Pair<double2, ECubeFace>  SphericalCubeProjection<P>::InverseProjection (const double3 &coord)
+	template <typename PP, typename TP>
+	inline Pair<double2, ECubeFace>  SphericalCubeProjection<PP,TP>::InverseProjection (const double3 &coord)
 	{
 		auto[c, face] = Projection_t::Inverse( coord );
 		return { c, face };
 	}
 	
-	template <typename P>
-	inline Pair<float2, ECubeFace>  SphericalCubeProjection<P>::InverseProjection (const float3 &coord)
+	template <typename PP, typename TP>
+	inline Pair<float2, ECubeFace>  SphericalCubeProjection<PP,TP>::InverseProjection (const float3 &coord)
 	{
 		auto[c, face] = Projection_t::Inverse( double3(coord) );
 		return { float2(c), face };
@@ -129,14 +129,14 @@ namespace FG
 	ForwardTexProjection
 =================================================
 */
-	template <typename P>
-	inline double3  SphericalCubeProjection<P>::ForwardTexProjection (const double2 &ncoord, ECubeFace face)
+	template <typename PP, typename TP>
+	inline double3  SphericalCubeProjection<PP,TP>::ForwardTexProjection (const double2 &ncoord, ECubeFace face)
 	{
 		return TextureProjection_t::Forward( ncoord, face );
 	}
-
-	template <typename P>
-	inline float3  SphericalCubeProjection<P>::ForwardTexProjection (const float2 &ncoord, ECubeFace face)
+	
+	template <typename PP, typename TP>
+	inline float3  SphericalCubeProjection<PP,TP>::ForwardTexProjection (const float2 &ncoord, ECubeFace face)
 	{
 		return float3(TextureProjection_t::Forward( double2(ncoord), face ));
 	}
@@ -146,15 +146,15 @@ namespace FG
 	InverseTexProjection
 =================================================
 */
-	template <typename P>
-	inline Pair<double2, ECubeFace>  SphericalCubeProjection<P>::InverseTexProjection (const double3 &coord)
+	template <typename PP, typename TP>
+	inline Pair<double2, ECubeFace>  SphericalCubeProjection<PP,TP>::InverseTexProjection (const double3 &coord)
 	{
 		auto[c, face] = TextureProjection_t::Inverse( coord );
 		return { c, face };
 	}
-
-	template <typename P>
-	inline Pair<float2, ECubeFace>  SphericalCubeProjection<P>::InverseTexProjection (const float3 &coord)
+	
+	template <typename PP, typename TP>
+	inline Pair<float2, ECubeFace>  SphericalCubeProjection<PP,TP>::InverseTexProjection (const float3 &coord)
 	{
 		auto[c, face] = TextureProjection_t::Inverse( double3(coord) );
 		return { float2(c), face };

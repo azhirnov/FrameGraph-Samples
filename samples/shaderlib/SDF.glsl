@@ -24,6 +24,7 @@ float SDF_Torus (const float3 position, const float2 firstAndSecondRadius);
 float SDF_Cylinder (const float3 position, const float2 radiusHeight);
 float SDF_Cone (const float3 position, const float2 direction);
 float SDF_Plane (const float3 position, const float3 norm, const float dist);
+float SDF_Plane (const float3 center, const float3 planePos, const float3 pos);
 float SDF_HexagonalPrism (const float3 position, const float2 h);
 float SDF_TriangularPrism (const float3 position, const float2 h);
 float SDF_Capsule (const float3 position, const float3 a, const float3 b, const float r);
@@ -138,6 +139,14 @@ float SDF_Plane (const float3 position, const float3 norm, const float dist)
 {
 	// 'norm' must be normalized
 	return Dot( position, norm ) + dist;
+}
+
+
+float SDF_Plane (const float3 center, const float3 planePos, const float3 pos)
+{
+	float3	v = center - planePos;
+	float	d = Length( v );
+	return Dot( v / d, pos ) - d;
 }
 
 

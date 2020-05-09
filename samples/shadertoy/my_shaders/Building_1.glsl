@@ -1,3 +1,4 @@
+// Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 
 #include "Math.glsl"
 #include "SDF.glsl"
@@ -88,6 +89,8 @@ float3 MtrBuilding1 (const Ray ray, const DistAndMat dm, const float3 norm)
 
 	return float3(mtr);
 }
+//-----------------------------------------------------------------------------
+
 
 float4 RayTrace (in Ray ray)
 {

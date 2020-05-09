@@ -155,9 +155,9 @@ namespace FG
 		tinyobj::attrib_t attrib;
 		std::vector<tinyobj::shape_t> shapes;
 		std::vector<tinyobj::material_t> materials;
-		std::string err, warn;
+		std::string err;
 
-		CHECK_ERR( tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, path.c_str() ));
+		CHECK_ERR( tinyobj::LoadObj(&attrib, &shapes, &materials, &err, path.c_str() ));
 
 		std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
 

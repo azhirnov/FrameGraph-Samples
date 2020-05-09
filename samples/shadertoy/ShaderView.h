@@ -51,10 +51,11 @@ namespace FG
 
 		// methods
 			ShaderDescr () {}
-			ShaderDescr&  Pipeline (String &&file, String &&def = "")	{ _pplnFilename = std::move(file);  _pplnDefines = std::move(def);  return *this; }
-			ShaderDescr&  SetScale (float value)						{ _surfaceScale = value;  return *this; }
-			ShaderDescr&  SetDimension (uint2 value)					{ _surfaceSize = value;  return *this; }
-			ShaderDescr&  SetFormat (EPixelFormat value)				{ _format = value;  return *this; }
+			ShaderDescr&  Pipeline (String &&file, String &&def = "")               	{ _pplnFilename = std::move(file);  _pplnDefines = std::move(def);  return *this; }
+			ShaderDescr&  SetScale (float value)										{ _surfaceScale = value;  return *this; }
+			ShaderDescr&  SetDimension (uint2 value)									{ _surfaceSize = value;  return *this; }
+			ShaderDescr&  SetFormat (EPixelFormat value)								{ _format = value;  return *this; }
+			ShaderDescr&  SetIPD (float value)											{ _ipd = value;  return *this; }
 			
 			ShaderDescr&  InChannel (const String &name, uint index, RawSamplerID samp = {}, bool flipY = false) {
 				_channels.push_back({ name, index, samp, flipY });  return *this;
@@ -89,6 +90,10 @@ namespace FG
 			float		_padding7;
 			vec3		iCameraPos;				// offset: 272, align: 16	// camera position in world space
 			int			iEyeIndex;
+			int			iControllerMask;		// 0 - all inactive, 1 - left, 2 - right
+			int			_padding8[3];
+			mat4x4		iLeftControllerPose;	// VR controllers
+			mat4x4		iRightControllerPose;
 		};
 
 
@@ -177,8 +182,11 @@ namespace FG
 		FPSCamera				_camera;
 		Rad						_cameraFov			= 60_deg;
 		VRCamera				_vrCamera;
+		mat4x4					_leftHand;
+		mat4x4					_rightHand;
 
-		Optional<vec2>			_debugPixel;
+		Optional<vec2>			_tracePixel;
+		Optional<vec2>			_profilePixel;
 
 		ImageCache_t			_imageCache;
 		
@@ -203,7 +211,9 @@ namespace FG
 		void  SetCamera (const VRCamera &value);
 		void  SetFov (Rad value);
 		void  SetImageFormat (EPixelFormat value, uint msaa = 0);
-		void  DebugPixel (const vec2 &coord);
+		void  RecordShaderTrace (const vec2 &coord);
+		void  RecordShaderProfiling (const vec2 &coord);
+		void  SetControllerPose (const mat4x4 &left, const mat4x4 &right, uint mask);
 
 		ND_ DrawResult_t  Draw (const CommandBuffer &cmd, uint frameId, SecondsF time, SecondsF dt);
 
@@ -230,6 +240,7 @@ namespace FG
 		EImage _GetImageType (StringView filename) const;
 
 		GPipelineID  _Compile (StringView name, StringView defs, StringView samplers) const;
+		GPipelineID  _CreateDefault (StringView samplers) const;
 	};
 
 

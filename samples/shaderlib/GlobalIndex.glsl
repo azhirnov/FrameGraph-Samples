@@ -41,7 +41,7 @@ int3    GetGroupCoord ();		// 0..size-1
 float3  GetGroupCoordUNorm ();	//  0..1
 float3  GetGroupCoordSNorm ();	// -1..1
 
-// global normalized coordinate in 2D with correction
+// global normalized coordinate in 2D with same aspect ratio
 float2  GetGlobalCoordUNormCorrected ();	//  0..1
 float2  GetGlobalCoordSNormCorrected ();	// -1..1
 
@@ -195,7 +195,7 @@ float3 GetGroupCoordSNorm ()
 }
 
 
-// global normalized coordinate in 2D with correction
+// global normalized coordinate in 2D with same aspect ratio
 float2 GetGlobalCoordUNormCorrected ()
 {
 	float2	size = float2(GetGlobalSize().xy - 1);

@@ -1,5 +1,3 @@
-cmake_minimum_required( VERSION 3.10 FATAL_ERROR )
-
 if (${FG_ENABLE_GLM})
 	file( GLOB_RECURSE SOURCES "*.*" )
 	if (DEFINED ANDROID)
@@ -10,7 +8,11 @@ if (${FG_ENABLE_GLM})
 	source_group( TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES} )
 	target_include_directories( "Samples.Shadertoy" PUBLIC "." )
 	set_property( TARGET "Samples.Shadertoy" PROPERTY FOLDER "Samples" )
+
 	target_link_libraries( "Samples.Shadertoy" PUBLIC "Samples.Utils" )
-	target_link_libraries( "Samples.Shadertoy" PUBLIC "Video" )
+	if (TARGET "Video")
+		target_link_libraries( "Samples.Shadertoy" PUBLIC "Video" )
+	endif()
+
 	target_compile_definitions( "Samples.Shadertoy" PUBLIC "FG_DATA_PATH=R\"(${CMAKE_CURRENT_SOURCE_DIR}/)\"" )
 endif ()

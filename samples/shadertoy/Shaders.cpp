@@ -157,27 +157,6 @@ namespace FG
 		sh_main.Pipeline( "st_shaders/Luminescence.glsl" );
 		sv->AddShader( "main", std::move(sh_main) );
 	}
-
-	void Shaders::Shadertoy::PeacefulPostApocalyptic (Ptr<ShaderView> sv)
-	{
-		ShaderDescr	sh_bufA;
-		sh_bufA.Pipeline( "st_shaders/PeacefulPostApocalyptic_0.glsl" );
-		sh_bufA.InChannel( "st_data/Pebbles.png", 0, sv->MipmapRepeatSampler() );
-		sh_bufA.InChannel( "st_data/RustyMetal.jpg", 1, sv->MipmapRepeatSampler() );
-		sh_bufA.InChannel( "st_data/GreyNoiseSmall.png", 2, sv->MipmapRepeatSampler() );
-		sv->AddShader( "bufA", std::move(sh_bufA) );
-		
-		ShaderDescr	sh_bufB;
-		sh_bufB.Pipeline( "st_shaders/PeacefulPostApocalyptic_1.glsl" );
-		sh_bufB.InChannel( "bufA", 0, sv->LinearClampSampler() );
-		sh_bufB.InChannel( "bufB", 1, sv->LinearClampSampler() );
-		sv->AddShader( "bufB", std::move(sh_bufB) );
-
-		ShaderDescr	sh_main;
-		sh_main.Pipeline( "st_shaders/PeacefulPostApocalyptic_2.glsl" );
-		sh_main.InChannel( "bufB", 0, sv->LinearClampSampler() );
-		sv->AddShader( "main", std::move(sh_main) );
-	}
 //-----------------------------------------------------------------------------
 
 	
@@ -304,6 +283,15 @@ namespace FG
 		sh_main.InChannel( "st_data/RGBANoiseMedium.png", 0, sv->MipmapRepeatSampler() );
 		sv->AddShader( "main", std::move(sh_main) );
 	}
+
+	void Shaders::ShadertoyVR::ThenAndBefore (Ptr<ShaderView> sv)
+	{
+		ShaderDescr sh_main;
+		sh_main.Pipeline( "st_shaders/ThenAndBefore.glsl" );
+		sh_main.InChannel( "main", 0, sv->LinearClampSampler() );
+		sh_main.SetIPD( DefaultIPD * 1.5f );
+		sv->AddShader( "main", std::move(sh_main) );
+	}
 //-----------------------------------------------------------------------------
 	
 	
@@ -363,6 +351,18 @@ namespace FG
 		sh_main.Pipeline( "my_shaders/OptSDF_3.glsl", "#define RADIUS "s << ToString(radius) );
 		sh_main.InChannel( "bufA", 0 );
 		sh_main.InChannel( "bufB", 1 );
+		sv->AddShader( "main", std::move(sh_main) );
+	}
+
+	void Shaders::My::ThousandsOfStars (Ptr<ShaderView> sv)
+	{
+		ShaderDescr	sh_bufA;
+		sh_bufA.Pipeline( "my_shaders/ThousandsOfStars_0.glsl" );
+		sv->AddShader( "bufA", std::move(sh_bufA) );
+
+		ShaderDescr	sh_main;
+		sh_main.Pipeline( "my_shaders/ThousandsOfStars_1.glsl" );
+		sh_main.InChannel( "bufA", 0, sv->LinearClampSampler() );
 		sv->AddShader( "main", std::move(sh_main) );
 	}
 //-----------------------------------------------------------------------------

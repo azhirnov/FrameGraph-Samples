@@ -4,6 +4,27 @@
 
 #include "Hash.glsl"
 
+float  GradientNoise (sampler2D rgbaNoise, const float3 pos);															// range [-1..1]
+float  GradientNoise (const float3 pos);																				// range [-1..1]
+float  IQNoise (sampler2D rgbaNoise, const float3 pos, float u, float v);												// range [-1..1]
+float  IQNoise (const float3 pos, float u, float v);																	// range [-1..1]
+float  ValueNoise (sampler2D greyNoise, const float3 pos);																// range [-1..1]
+float  ValueNoise (const float3 pos);																					// range [-1..1]
+float  PerlinNoise (sampler2D rgbaNoise, const float3 pos);																// range [-1..1]
+float  PerlinNoise (const float3 pos);																					// range [-1..1]
+float  PerlinFBM (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);						// range [-1..1]
+float  PerlinFBM2 (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);						// range [-1..1]
+float3 Turbulence (const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount);// range [-1..1]	returns position
+float  SimplexNoise (sampler2D rgbaNoise, const float3 pos);															// range [-1..1]
+float  SimplexNoise (const float3 pos);																					// range [-1..1]
+float3 Voronoi (const float2 coord, const float seed);																	// range [0..inf]	returns {min_dist, center}
+float4 Voronoi (const float3 coord, const float seed);																	// range [0..inf]	returns {min_dist, center}
+float  WarleyFBM (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);				// range [0..1]
+float  WarleyFBM2 (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);				// range [0..1]
+float  VoronoiContour (const float2 coord, const float seed);															// range [0..inf]
+float  VoronoiCircles (const float2 coord, const float radiusScale, const float seed);									// range [0..inf]
+//-----------------------------------------------------------------------------
+
 
 // range [-1..1]
 float GradientNoise (sampler2D rgbaNoise, const float3 pos)
@@ -167,6 +188,7 @@ float IQNoise (const float3 pos, float u, float v)
 //-----------------------------------------------------------------------------
 
 
+// range [-1..1]
 float ValueNoise (sampler2D greyNoise, const float3 pos)
 {
 	// from https://www.shadertoy.com/view/4sc3z2
@@ -578,3 +600,4 @@ float  VoronoiCircles (const float2 coord, const float radiusScale, const float 
 
 	return 0.0;
 }
+//-----------------------------------------------------------------------------

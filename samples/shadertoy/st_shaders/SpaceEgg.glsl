@@ -1,3 +1,5 @@
+// from https://www.shadertoy.com/view/Mtj3DV
+
 /* space egg, by mattz
    License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
 

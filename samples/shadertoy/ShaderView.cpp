@@ -93,6 +93,18 @@ namespace FG
 		_cameraFov = value;
 		_camera.SetPerspective( _cameraFov, float(_viewSize.x) / _viewSize.y, 0.1f, 100.0f );
 	}
+	
+/*
+=================================================
+	SetControllerPose
+=================================================
+*/
+	void  ShaderView::SetControllerPose (const mat4x4 &left, const mat4x4 &right, uint mask)
+	{
+		_leftHand  = left;
+		_rightHand = right;
+		_ubData.iControllerMask = mask;
+	}
 
 /*
 =================================================
@@ -139,12 +151,22 @@ namespace FG
 	
 /*
 =================================================
-	DebugPixel
+	RecordShaderTrace
 =================================================
 */
-	void  ShaderView::DebugPixel (const vec2 &coord)
+	void  ShaderView::RecordShaderTrace (const vec2 &coord)
 	{
-		_debugPixel = coord;
+		_tracePixel = coord;
+	}
+	
+/*
+=================================================
+	RecordShaderProfiling
+=================================================
+*/
+	void  ShaderView::RecordShaderProfiling (const vec2 &coord)
+	{
+		_profilePixel = coord;
 	}
 
 /*
@@ -234,13 +256,20 @@ namespace FG
 			{
 				_vrCamera.GetFrustum()[eye]->GetRays( OUT _ubData.iCameraFrustumRayLB, OUT _ubData.iCameraFrustumRayLT,
 													  OUT _ubData.iCameraFrustumRayRB, OUT _ubData.iCameraFrustumRayRT );
-				_ubData.iCameraPos	= _vrCamera.Position();
+				_ubData.iCameraPos = _vrCamera.Position();
+
+				const auto	view_mat = _vrCamera.ToViewMatrix()[eye];
+				_ubData.iLeftControllerPose  = view_mat * _leftHand;
+				_ubData.iRightControllerPose = view_mat * _rightHand;
 			}
 			else
 			{
 				_camera.GetFrustum().GetRays( OUT _ubData.iCameraFrustumRayLB, OUT _ubData.iCameraFrustumRayLT,
-									  OUT _ubData.iCameraFrustumRayRB, OUT _ubData.iCameraFrustumRayRT );
-				_ubData.iCameraPos	= _camera.GetCamera().transform.position;
+											  OUT _ubData.iCameraFrustumRayRB, OUT _ubData.iCameraFrustumRayRT );
+				_ubData.iCameraPos			 = _camera.GetCamera().transform.position;
+				_ubData.iControllerMask		 = 0;
+				_ubData.iLeftControllerPose  = Mat4x4_Identity;
+				_ubData.iRightControllerPose = Mat4x4_Identity;
 			}
 			
 			for (size_t i = 0; i < pass.images.size(); ++i)
@@ -261,27 +290,42 @@ namespace FG
 			_currTask = cmdBuffer->AddTask( UpdateBuffer{}.SetBuffer( eye_data.ubuffer ).AddData( &_ubData, 1 ).DependsOn( _currTask ));
 		}
 
+		RawGPipelineID	ppln = 
+			_viewMode == EViewMode::Mono		? shader->_pipeline.mono.Get() :
+			_viewMode == EViewMode::Mono360		? shader->_pipeline.mono360.Get() :
+			_viewMode == EViewMode::HMD_VR		? shader->_pipeline.hmdVR.Get() :
+			_viewMode == EViewMode::VR180_Video	? shader->_pipeline.vr180.Get() :
+			_viewMode == EViewMode::VR360_Video	? shader->_pipeline.vr360.Get() : Default;
+
+		if ( not ppln )
+			return true;
 
 		LogicalPassID	pass_id = cmdBuffer->CreateRenderPass( RenderPassDesc( view_size )
 										.AddTarget( RenderTargetID::Color_0, pass.renderTargetMS ? pass.renderTargetMS : pass.renderTarget, EAttachmentLoadOp::Load, EAttachmentStoreOp::Store )
 										.AddViewport( view_size ));
 
 		DrawVertices	draw_task;
-		draw_task.SetPipeline(
-			_viewMode == EViewMode::Mono		? shader->_pipeline.mono.Get() :
-			_viewMode == EViewMode::Mono360		? shader->_pipeline.mono360.Get() :
-			_viewMode == EViewMode::HMD_VR		? shader->_pipeline.hmdVR.Get() :
-			_viewMode == EViewMode::VR180_Video	? shader->_pipeline.vr180.Get() :
-			_viewMode == EViewMode::VR360_Video	? shader->_pipeline.vr360.Get() : Default );
+		draw_task.SetPipeline( ppln );
 		draw_task.AddResources( DescriptorSetID{"0"}, &pass.resources );
-		draw_task.Draw( 4 ).SetTopology( EPrimitive::TriangleStrip );
+		draw_task.Draw( 3 ).SetTopology( EPrimitive::TriangleStrip );
 
-		if ( isLast and _debugPixel.has_value() )
+		// shader debugger
 		{
-			const vec2	coord = vec2{pass.viewport.x, pass.viewport.y} * (*_debugPixel) + 0.5f;
+			if ( isLast and _tracePixel.has_value() )
+			{
+				const vec2	coord = vec2{pass.viewport.x, pass.viewport.y} * (*_tracePixel) + 0.5f;
 
-			draw_task.EnableFragmentDebugTrace( int(coord.x), int(coord.y) );
-			_debugPixel.reset();
+				draw_task.EnableFragmentDebugTrace( int(coord.x), int(coord.y) );
+				_tracePixel.reset();
+			}
+		
+			if ( isLast and _profilePixel.has_value() )
+			{
+				const vec2	coord = vec2{pass.viewport.x, pass.viewport.y} * (*_profilePixel) + 0.5f;
+
+				draw_task.EnableFragmentDebugTrace( int(coord.x), int(coord.y) );
+				_profilePixel.reset();
+			}
 		}
 
 		cmdBuffer->AddTask( pass_id, draw_task );
@@ -363,31 +407,36 @@ namespace FG
 		if ( _viewMode == EViewMode::Mono and not shader->_pipeline.mono )
 		{
 			shader->_pipeline.mono = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 0\n", samplers );
-			CHECK_ERR( shader->_pipeline.mono );
+			if ( not shader->_pipeline.mono )
+				shader->_pipeline.mono = _CreateDefault( samplers );
 		}
 
 		if ( _viewMode == EViewMode::Mono360 and not shader->_pipeline.mono360 )
 		{
 			shader->_pipeline.mono360 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3601\n", samplers );
-			CHECK_ERR( shader->_pipeline.mono360 );
+			if ( not shader->_pipeline.mono360 )
+				shader->_pipeline.mono360 = _CreateDefault( samplers );
 		}
 		
 		if ( _viewMode == EViewMode::HMD_VR and not shader->_pipeline.hmdVR )
 		{
 			shader->_pipeline.hmdVR = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1\n", samplers );
-			CHECK_ERR( shader->_pipeline.hmdVR );
+			if ( not shader->_pipeline.hmdVR )
+				shader->_pipeline.hmdVR = _CreateDefault( samplers );
 		}
 		
 		if ( _viewMode == EViewMode::VR180_Video and not shader->_pipeline.vr180 )
 		{
 			shader->_pipeline.vr180 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 1802\n", samplers );
-			CHECK_ERR( shader->_pipeline.vr180 );
+			if ( not shader->_pipeline.vr180 )
+				shader->_pipeline.vr180 = _CreateDefault( samplers );
 		}
 		
 		if ( _viewMode == EViewMode::VR360_Video and not shader->_pipeline.vr360 )
 		{
 			shader->_pipeline.vr360 = _Compile( shader->_pplnFilename, shader->_pplnDefines + "\n#define VIEW_MODE 3602\n", samplers );
-			CHECK_ERR( shader->_pipeline.vr360 );
+			if ( not shader->_pipeline.vr360 )
+				shader->_pipeline.vr360 = _CreateDefault( samplers );
 		}
 
 		// check dependencies
@@ -455,7 +504,7 @@ namespace FG
 				desc.imageType	= EImage::Tex2D;
 				desc.dimension	= uint3{ pass.viewport, 1 };
 				desc.format		= shader->_format.value_or( _imageFormat );
-				desc.usage		= EImageUsage::Transfer | EImageUsage::Sampled | EImageUsage::ColorAttachment;
+				desc.usage		= EImageUsage::Transfer | EImageUsage::Sampled | EImageUsage::ColorAttachment | EImageUsage::Storage;
 
 				EResourceState	def_state	= is_vr ? EResourceState::TransferSrc : EResourceState::Unknown;
 				const String	name		= String(shader->Name()) << "-RT-" << ToString(Distance( eye_data.passes.data(), &pass ))
@@ -577,6 +626,16 @@ namespace FG
 		}
 		shader->_perEye.clear();
 	}
+	
+/*
+=================================================
+	_CreateDefault
+=================================================
+*/
+	GPipelineID  ShaderView::_CreateDefault (StringView samplers) const
+	{
+		return _Compile( "st_shaders/default.glsl", "", samplers );
+	}
 
 /*
 =================================================
@@ -587,8 +646,7 @@ namespace FG
 	{
 		const char	vs_source[] = R"#(
 			const vec2	g_Positions[] = {
-				{ -1.0f,  1.0f },  { -1.0f, -1.0f },
-				{  1.0f,  1.0f },  {  1.0f, -1.0f }
+				{ -1.0f, 3.0f },  { -1.0f, -1.0f },  { 3.0f, -1.0f }
 			};
 
 			void main() {
@@ -618,6 +676,9 @@ namespace FG
 				vec3	iCameraFrustumRT;
 				vec3	iCameraPos;				// camera position in world space
 				int		iEyeIndex;
+				int		iControllerMask;
+				mat4x4	iLeftControllerPose;	// VR controllers
+				mat4x4	iRightControllerPose;
 			};
 
 			layout(location=0) out vec4	out_Color;
@@ -656,7 +717,7 @@ namespace FG
 					float	scale	= 1.0;
 				#endif
 
-					float	theta	= uv.x * 2.0 * pi - pi;
+					float	theta	= (uv.x) * 2.0 * pi - pi;
 					float	phi		= pi * 0.5 - uv.y * pi;
 
 					vec3	origin	= vec3(cos(theta), 0.0, sin(theta)) * scale;
@@ -695,7 +756,7 @@ namespace FG
 
 		GraphicsPipelineDesc	desc;
 		desc.AddShader( EShader::Vertex, EShaderLangFormat::VKSL_110, "main", vs_source );
-		desc.AddShader( EShader::Fragment, EShaderLangFormat::VKSL_110 | EShaderLangFormat::EnableDebugTrace, "main", std::move(src0), name );
+		desc.AddShader( EShader::Fragment, EShaderLangFormat::VKSL_110 | EShaderLangFormat::_DebugModeMask, "main", std::move(src0), name );
 
 		GPipelineID ppln = _frameGraph->CreatePipeline( desc, name );
 

@@ -31,7 +31,6 @@ namespace FG
 			static void NovaMarble (Ptr<ShaderView> sv)				{ sv->AddShader("st_shaders/NovaMarble.glsl"); }
 			static void Organix (Ptr<ShaderView> sv);
 			static void PlasmaGlobe (Ptr<ShaderView> sv);
-			static void PeacefulPostApocalyptic (Ptr<ShaderView> sv);
 			static void SpaceEgg (Ptr<ShaderView> sv)				{ sv->AddShader("st_shaders/SpaceEgg.glsl"); }
 			static void SculptureIII (Ptr<ShaderView> sv);
 			static void StructuredVolSampling (Ptr<ShaderView> sv);
@@ -59,13 +58,16 @@ namespace FG
 			static void SphereFBM (Ptr<ShaderView> sv)				{ sv->AddShader("st_shaders/SphereFBM.glsl"); }
 			static void Skyline (Ptr<ShaderView> sv);
 			static void Xyptonjtroz (Ptr<ShaderView> sv)			{ sv->AddShader("st_shaders/Xyptonjtroz.glsl"); }
+			static void ThenAndBefore (Ptr<ShaderView> sv);
 		};
 		
 		struct My
 		{
 			static void ConvexShape2D (Ptr<ShaderView> sv)			{ sv->AddShader("my_shaders/ConvexShape2D.glsl"); }
+			static void VoronoiRecursion (Ptr<ShaderView> sv)		{ sv->AddShader("my_shaders/VoronoiRecursion.glsl"); }
 			static void OptimizedSDF (Ptr<ShaderView> sv);
 			static void PrecalculatedRays (Ptr<ShaderView> sv);
+			static void ThousandsOfStars (Ptr<ShaderView> sv);
 		};
 
 		struct MyVR

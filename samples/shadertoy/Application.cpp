@@ -5,6 +5,9 @@
 #include "stl/Algorithms/StringUtils.h"
 #include "video/FFmpegRecorder.h"
 
+#include "stl/Algorithms/StringUtils.h"
+#include "stl/Stream/FileStream.h"
+
 namespace FG
 {
 /*
@@ -32,7 +35,6 @@ namespace FG
 		_samples.push_back( Shaders::Shadertoy::NovaMarble );
 		_samples.push_back( Shaders::Shadertoy::Organix );
 		_samples.push_back( Shaders::Shadertoy::PlasmaGlobe );
-		_samples.push_back( Shaders::Shadertoy::PeacefulPostApocalyptic );
 		_samples.push_back( Shaders::Shadertoy::SpaceEgg );
 		_samples.push_back( Shaders::Shadertoy::SculptureIII );
 		_samples.push_back( Shaders::Shadertoy::StructuredVolSampling );
@@ -61,8 +63,10 @@ namespace FG
 		_samples.push_back( Shaders::My::ConvexShape2D );
 		_samples.push_back( Shaders::My::OptimizedSDF );
 		_samples.push_back( Shaders::My::PrecalculatedRays );
+		_samples.push_back( Shaders::My::VoronoiRecursion );
+		_samples.push_back( Shaders::My::ThousandsOfStars );
 
-		_samples.push_back( Shaders::MyVR::ConvexShape3D );
+		//_samples.push_back( Shaders::MyVR::ConvexShape3D );
 		_samples.push_back( Shaders::MyVR::Building_1 );
 		_samples.push_back( Shaders::MyVR::Building_2 );
 	}
@@ -100,7 +104,7 @@ namespace FG
 			cfg.windowTitle			= "Shadertoy";
 			cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib", FG_DATA_PATH };
 			cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
-			//cfg.vrMode				= AppConfig::EVRMode::Emulator;
+			//cfg.vrMode				= AppConfig::EVRMode::OpenVR;
 			//cfg.enableDebugLayers	= false;
 			CHECK_ERR( _CreateFrameGraph( cfg ));
 		}
@@ -140,18 +144,23 @@ namespace FG
 
 			if ( key == "R" )		_view->Recompile();
 			if ( key == "T" )		_frameCounter = 0;
-			if ( key == "U" )		_view->DebugPixel( GetMousePos() / vec2{GetSurfaceSize().x, GetSurfaceSize().y} );
 			if ( key == "P" )		_ResetPosition();
 
 			if ( key == "F" )		{ _skipLastTime = _freeze;	_freeze = not _freeze;	}
 			if ( key == "space" )	{ _skipLastTime = _pause;	_pause  = not _pause;	}
 
 			if ( key == "M" )		_vrMirror = not _vrMirror;
+			if ( key == "I" )		_makeScreenshot = true;
+
+			// profiling
+			if ( key == "G" )		_view->RecordShaderTrace( GetMousePos() / vec2{GetSurfaceSize().x, GetSurfaceSize().y} );
+			if ( key == "H" )		_view->RecordShaderProfiling( GetMousePos() / vec2{GetSurfaceSize().x, GetSurfaceSize().y} );
+			if ( key == "J" )		_showTimemap = not _showTimemap;
 		}
 
 		if ( action == EKeyAction::Up )
 		{
-			if ( key == "L" )		_StartStopRecording();
+			if ( key == "U" )		_StartStopRecording();
 		}
 	}
 		
@@ -186,11 +195,31 @@ namespace FG
 		{
 			_UpdateCamera();
 
-			if ( GetVRDevice() and GetVRDevice()->GetHmdStatus() == IVRDevice::EHmdStatus::Mounted )
+			if ( IsActiveVR() )
 			{
 				_viewMode	= EViewMode::HMD_VR;
-				_targetSize	= uint2(float2(GetVRDevice()->GetRenderTargetDimension()) * _sufaceScale + 0.5f);
+				_targetSize	= uint2(float2(GetVRDevice()->GetRenderTargetDimension()) * _vrSufaceScale + 0.5f);
 				_view->SetCamera( GetVRCamera() );
+
+				auto&	vr_cont = GetVRDevice()->GetControllers();
+				auto	left	= vr_cont.find( ControllerID::LeftHand );
+				auto	right	= vr_cont.find( ControllerID::RightHand );
+				bool	l_valid	= left  != vr_cont.end() and left->second.isValid;
+				bool	r_valid	= right != vr_cont.end() and right->second.isValid;
+				mat4x4	l_mvp, r_mvp;
+
+				if ( l_valid )
+				{
+					l_mvp = mat4x4(MatCast(left->second.pose));
+					l_mvp[3] = vec4(VecCast(left->second.position), 1.0);
+				}
+				if ( r_valid )
+				{
+					r_mvp = mat4x4(MatCast(right->second.pose));
+					r_mvp[3] = vec4(VecCast(right->second.position), 1.0);
+				}
+
+				_view->SetControllerPose( l_mvp, r_mvp, (l_valid ? 1 : 0) | (r_valid ? 2 : 0) );
 			}
 			else
 			{
@@ -210,6 +239,11 @@ namespace FG
 
 		CommandBuffer	cmdbuf = _frameGraph->Begin( CommandBufferDesc{ EQueueType::Graphics });
 		CHECK_ERR( cmdbuf );
+
+		if ( _viewMode != EViewMode::HMD_VR and _showTimemap )
+			cmdbuf->BeginShaderTimeMap( _targetSize, EShaderStages::Fragment );
+
+		// draw shader viewer
 		{
 			const auto	time = TimePoint_t::clock::now();
 
@@ -235,8 +269,7 @@ namespace FG
 				
 			_lastUpdateTime	= time;
 		}
-
-
+		
 		// present
 		if ( _viewMode == EViewMode::HMD_VR )
 		{
@@ -266,6 +299,9 @@ namespace FG
 		}
 		else
 		{
+			if ( _showTimemap )
+				task = cmdbuf->EndShaderTimeMap( image_l, Default, Default, {task} );
+
 			const auto&	desc	= _frameGraph->GetDescription( image_l );
 			const uint2	point	= { uint((desc.dimension.x * GetMousePos().x) / GetSurfaceSize().x + 0.5f),
 									uint((desc.dimension.y * GetMousePos().y) / GetSurfaceSize().y + 0.5f) };
@@ -286,6 +322,18 @@ namespace FG
 									{
 										if ( _videoRecorder )
 											CHECK( _videoRecorder->AddFrame( view ));
+									})
+									.DependsOn( task ));
+			}
+			else
+			// make screenshot
+			if ( _makeScreenshot )
+			{
+				_makeScreenshot = false;
+				cmdbuf->AddTask( ReadImage{}.SetImage( image_l, uint2(0), _targetSize )
+									.SetCallback( [this] (const ImageView &view)
+									{
+										_SaveImage( view );
 									})
 									.DependsOn( task ));
 			}
@@ -377,6 +425,16 @@ namespace FG
 	{
 		GetFPSCamera().SetPosition({ 0.0f, 0.0f, 0.0f });
 	}
-
+	
+/*
+=================================================
+	_SaveImage
+=================================================
+*/
+	void  Application::_SaveImage (const ImageView &view)
+	{
+#	if defined(FG_ENABLE_DEVIL) and defined(FG_STD_FILESYSTEM)
+#	endif
+	}
 
 }	// FG

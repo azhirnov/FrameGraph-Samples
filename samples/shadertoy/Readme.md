@@ -8,8 +8,10 @@
 `R` - reload shader<br/>
 `T` - reset time<br/>
 `F` - freeze time<br/>
-`U` - run shader debugger for pixel under cursor<br/>
-`L` - start/stop video recording<br/>
+`U` - start/stop video recording<br/>
+`G` - run shader debugger for pixel under cursor<br/>
+`H` - run shader profiler for pixel under cursor<br/>
+`J` - show/hide shader timemap<br/>
 `space` - pause rendering<br/>
 `escape` - exit<br/>
 `left mouse button` - rotate by mouse<br/>

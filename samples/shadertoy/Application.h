@@ -44,11 +44,14 @@ namespace FG
 		bool					_freeze			= false;
 		bool					_skipLastTime	= false;
 		bool					_vrMirror		= false;
+		bool					_showTimemap	= false;
+		bool					_makeScreenshot	= false;
 
 		UniquePtr<IVideoRecorder>	_videoRecorder;
 		
 		static inline const Rad			_cameraFov		= 60_deg;
 		static inline const float		_sufaceScale	= 0.5f;
+		static inline const float		_vrSufaceScale	= 1.0f;
 		static constexpr EPixelFormat	_imageFormat	= EPixelFormat::RGBA8_UNorm;
 
 
@@ -77,6 +80,8 @@ namespace FG
 		void  _OnPixelReadn (const uint2 &point, const ImageView &view);
 		void  _StartStopRecording ();
 		void  _ResetPosition ();
+
+		void  _SaveImage (const ImageView &view);
 	};
 
 

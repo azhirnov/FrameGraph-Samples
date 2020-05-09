@@ -93,10 +93,10 @@
 #define OUT
 #define INOUT
 
-#define Less			lessThan
-#define Greater			greaterThan
-#define LessEqual		lessThanEqual
-#define GreaterEqual	greaterThanEqual
+#define Less			lessThan			// <
+#define Greater			greaterThan			// >
+#define LessEqual		lessThanEqual		// <=
+#define GreaterEqual	greaterThanEqual	// >=
 #define Not				not
 
 bool  Equals (const float  lhs, const float  rhs)  { return lhs == rhs; }

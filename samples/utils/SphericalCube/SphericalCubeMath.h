@@ -166,6 +166,30 @@ namespace FGC
 			return IdentitySphericalCube::Inverse( coord * 2.0 );
 		}
 	};
+	
+/*
+=================================================
+	TextureYFlipProjection
+=================================================
+*/
+	struct TextureYFlipProjection
+	{
+		ND_ static double3  Forward (const double2 &ncoord, ECubeFace face)
+		{
+			if ( face == ECubeFace::YPos )
+				face = ECubeFace::YNeg;
+			else
+			if ( face == ECubeFace::YNeg )
+				face = ECubeFace::YPos;
+
+			return IdentitySphericalCube::Forward( ncoord, face ) * 0.5;
+		}
+
+		ND_ static Pair<double2, ECubeFace>  Inverse (const double3 &coord)
+		{
+			return IdentitySphericalCube::Inverse( coord * 2.0 );
+		}
+	};
 
 
 }	// FGC

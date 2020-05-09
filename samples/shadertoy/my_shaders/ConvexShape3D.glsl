@@ -1,3 +1,4 @@
+// Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 
 #include "SDF.glsl"
 #include "RayTracing.glsl"
@@ -14,13 +15,6 @@
 
 #define SHAPE			RANDOM_1
 
-
-float SDF_Plane (const float3 center, const float3 planePos, const float3 pos)
-{
-	float3	v = center - planePos;
-	float	d = Length( v );
-	return Dot( v / d, pos ) - d;
-}
 
 #define SDF_FUNC() \
 	float SDF (float3 pos) \
