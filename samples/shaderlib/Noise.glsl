@@ -4,6 +4,20 @@
 
 #include "Hash.glsl"
 
+struct VoronoiResult2
+{
+	float2	icenter;
+	float2	offset;		// cell center = icenter + offset
+	float	minDist;	// squared distance in range [0..inf]
+};
+
+struct VoronoiResult3
+{
+	float3	icenter;
+	float3	offset;		// cell center = icenter + offset
+	float	minDist;	// squared distance in range [0..inf]
+};
+
 float  GradientNoise (sampler2D rgbaNoise, const float3 pos);															// range [-1..1]
 float  GradientNoise (const float3 pos);																				// range [-1..1]
 float  IQNoise (sampler2D rgbaNoise, const float3 pos, float u, float v);												// range [-1..1]
@@ -14,15 +28,20 @@ float  PerlinNoise (sampler2D rgbaNoise, const float3 pos);																// ra
 float  PerlinNoise (const float3 pos);																					// range [-1..1]
 float  PerlinFBM (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);						// range [-1..1]
 float  PerlinFBM2 (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);						// range [-1..1]
-float3 Turbulence (const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount);// range [-1..1]	returns position
+float  PerlinFBM (sampler2D rgbaNoise, in float3 pos, const float lacunarity, const float persistence, const int octaveCount);	// range [-1..1]
+float  PerlinFBM2 (sampler2D rgbaNoise, in float3 pos, const float lacunarity, const float persistence, const int octaveCount);	// range [-1..1]
+float3 Turbulence (const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount);	// returns position
+float3 Turbulence2 (const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount);	// returns position
+float3 Turbulence (sampler2D rgbaNoise, const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount);	// returns position
+float3 Turbulence2 (sampler2D rgbaNoise, const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount);	// returns position
 float  SimplexNoise (sampler2D rgbaNoise, const float3 pos);															// range [-1..1]
 float  SimplexNoise (const float3 pos);																					// range [-1..1]
-float3 Voronoi (const float2 coord, const float seed);																	// range [0..inf]	returns {min_dist, center}
-float4 Voronoi (const float3 coord, const float seed);																	// range [0..inf]	returns {min_dist, center}
+VoronoiResult2  Voronoi (const float2 coord, const float2 seedScaleBias);
+VoronoiResult3  Voronoi (const float3 coord, const float2 seedScaleBias);
 float  WarleyFBM (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);				// range [0..1]
 float  WarleyFBM2 (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);				// range [0..1]
-float  VoronoiContour (const float2 coord, const float seed);															// range [0..inf]
-float  VoronoiCircles (const float2 coord, const float radiusScale, const float seed);									// range [0..inf]
+float  VoronoiContour (const float2 coord, const float2 seedScaleBias);													// range [0..inf]
+float  VoronoiCircles (const float2 coord, const float radiusScale, const float2 seedScaleBias);						// range [0..inf]
 //-----------------------------------------------------------------------------
 
 
@@ -342,7 +361,55 @@ float PerlinFBM2 (in float3 pos, const float lacunarity, const float persistence
 }
 
 // range [-1..1]
+float PerlinFBM (sampler2D rgbaNoise, in float3 pos, const float lacunarity, const float persistence, const int octaveCount)
+{
+	float	value	= 0.0;
+	float	pers	= 1.0;
+	
+	for (int octave = 0; octave < octaveCount; ++octave)
+	{
+		value += PerlinNoise( rgbaNoise, pos ) * pers;
+		pos   *= lacunarity;
+		pers  *= persistence;
+	}
+	return value;
+}
+
+// range [-1..1]
+float PerlinFBM2 (sampler2D rgbaNoise, in float3 pos, const float lacunarity, const float persistence, const int octaveCount)
+{
+	float3x3 rot = float3x3( 0.00,  0.80,  0.60,
+						    -0.80,  0.36, -0.48,
+						    -0.60, -0.48,  0.64 );
+
+	float	value	= 0.0;
+	float	pers	= 1.0;
+	
+	for (int octave = 0; octave < octaveCount; ++octave)
+	{
+		value += PerlinNoise( rgbaNoise, pos ) * pers;
+		pos    = rot * pos * lacunarity;
+		pers  *= persistence;
+	}
+	return value;
+}
+//-----------------------------------------------------------------------------
+
+
+// returns position
 float3 Turbulence (const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount)
+{
+	const float3 p0 = pos + float3( 12414.0, 65124.0, 31337.0 ) / 65536.0;
+	const float3 p1 = pos + float3( 26519.0, 18128.0, 60493.0 ) / 65536.0;
+	const float3 p2 = pos + float3( 53820.0, 11213.0, 44845.0 ) / 65536.0;
+
+	const float3 distort = float3(PerlinFBM2( p0, lacunarity, persistence, octaveCount ),
+								  PerlinFBM2( p1, lacunarity, persistence, octaveCount ),
+								  PerlinFBM2( p2, lacunarity, persistence, octaveCount )) * power + pos;
+	return distort;
+}
+
+float3 Turbulence2 (const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount)
 {
 	const float3 p0 = pos + float3( 12414.0, 65124.0, 31337.0 ) / 65536.0;
 	const float3 p1 = pos + float3( 26519.0, 18128.0, 60493.0 ) / 65536.0;
@@ -351,6 +418,30 @@ float3 Turbulence (const float3 pos, const float power, const float lacunarity, 
 	const float3 distort = float3(PerlinFBM( p0, lacunarity, persistence, octaveCount ),
 								  PerlinFBM( p1, lacunarity, persistence, octaveCount ),
 								  PerlinFBM( p2, lacunarity, persistence, octaveCount )) * power + pos;
+	return distort;
+}
+
+float3 Turbulence (sampler2D rgbaNoise, const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount)
+{
+	const float3 p0 = pos + float3( 12414.0, 65124.0, 31337.0 ) / 65536.0;
+	const float3 p1 = pos + float3( 26519.0, 18128.0, 60493.0 ) / 65536.0;
+	const float3 p2 = pos + float3( 53820.0, 11213.0, 44845.0 ) / 65536.0;
+
+	const float3 distort = float3(PerlinFBM2( rgbaNoise, p0, lacunarity, persistence, octaveCount ),
+								  PerlinFBM2( rgbaNoise, p1, lacunarity, persistence, octaveCount ),
+								  PerlinFBM2( rgbaNoise, p2, lacunarity, persistence, octaveCount )) * power + pos;
+	return distort;
+}
+
+float3 Turbulence2 (sampler2D rgbaNoise, const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount)
+{
+	const float3 p0 = pos + float3( 12414.0, 65124.0, 31337.0 ) / 65536.0;
+	const float3 p1 = pos + float3( 26519.0, 18128.0, 60493.0 ) / 65536.0;
+	const float3 p2 = pos + float3( 53820.0, 11213.0, 44845.0 ) / 65536.0;
+
+	const float3 distort = float3(PerlinFBM( rgbaNoise, p0, lacunarity, persistence, octaveCount ),
+								  PerlinFBM( rgbaNoise, p1, lacunarity, persistence, octaveCount ),
+								  PerlinFBM( rgbaNoise, p2, lacunarity, persistence, octaveCount )) * power + pos;
 	return distort;
 }
 //-----------------------------------------------------------------------------
@@ -414,53 +505,58 @@ float SimplexNoise (const float3 pos)
 
 
 // range [0..inf]
-float3  Voronoi (const float2 coord, const float seed)
+VoronoiResult2  Voronoi (const float2 coord, const float2 seedScaleBias)
 {
 	float2	ipoint	= Floor( coord );
 	float2	fpoint	= Fract( coord );
-	float	md		= 1.0e+10;
-	float2	center	= float2(0.0);
+	
+	VoronoiResult2	result;
+	result.minDist = 1.0e+30;
 
 	[[unroll]] for (int y = -1; y <= 1; ++y)
 	[[unroll]] for (int x = -1; x <= 1; ++x)
 	{
-		float2	cur = float2( x, y );
-		float2	off = DHash22( ipoint + cur + seed ) + cur - fpoint;
-		float	d   = Dot( off, off );
+		float2	ioffset	= float2( x, y );
+		float2	offset	= DHash22( (ipoint + ioffset) * seedScaleBias.x + seedScaleBias.y );
+		float2	vec		= offset + ioffset - fpoint;
+		float	d		= Dot( vec, vec );
 		
-		if ( d < md )
+		if ( d < result.minDist )
 		{
-			md = Min( md, d );
-			center = ipoint + cur;
+			result.minDist	= Min( result.minDist, d );
+			result.icenter	= ipoint + ioffset;
+			result.offset	= offset;
 		}
 	}
-	return float3( md, center );
+	return result;
 }
 
-
 // range [0..inf]
-float4  Voronoi (const float3 coord, const float seed)
+VoronoiResult3  Voronoi (const float3 coord, const float2 seedScaleBias)
 {
 	float3	ipoint	= Floor( coord );
 	float3	fpoint	= Fract( coord );
-	float	md		= 1.0e+10;
-	float3	center	= float3(0.0);
+
+	VoronoiResult3	result;
+	result.minDist = 1.0e+30;
 
 	[[unroll]] for (int z = -1; z <= 1; ++z)
 	[[unroll]] for (int y = -1; y <= 1; ++y)
 	[[unroll]] for (int x = -1; x <= 1; ++x)
 	{
-		float3	cur = float3( x, y, z );
-		float3	off = DHash33( ipoint + cur + seed ) + cur - fpoint;
-		float	d   = Dot( off, off );
+		float3	ioffset	= float3( x, y, z );
+		float3	offset	= DHash33( (ipoint + ioffset) * seedScaleBias.x + seedScaleBias.y );
+		float3	vec		= offset + ioffset - fpoint;
+		float	d		= Dot( vec, vec );
 		
-		if ( d < md )
+		if ( d < result.minDist )
 		{
-			md = Min( md, d );
-			center = ipoint + cur;
+			result.minDist	= Min( result.minDist, d );
+			result.icenter	= ipoint + ioffset;
+			result.offset	= offset;
 		}
 	}
-	return float4( md, center );
+	return result;
 }
 //-----------------------------------------------------------------------------
 
@@ -473,7 +569,7 @@ float WarleyFBM (in float3 pos, const float lacunarity, const float persistence,
 	
 	for (int octave = 0; octave < octaveCount; ++octave)
 	{
-		value += (1.0 - Voronoi( pos, 0.0 ).x) * pers;
+		value += (1.0 - Voronoi( pos, float2(1.0, 0.0) ).minDist) * pers;
 		pos   *= lacunarity;
 		pers  *= persistence;
 	}
@@ -492,7 +588,7 @@ float WarleyFBM2 (in float3 pos, const float lacunarity, const float persistence
 	
 	for (int octave = 0; octave < octaveCount; ++octave)
 	{
-		value += (1.0 - Voronoi( pos, 0.0 ).x) * pers;
+		value += (1.0 - Voronoi( pos, float2(1.0, 0.0) ).minDist) * pers;
 		pos    = rot * pos * lacunarity;
 		pers  *= persistence;
 	}
@@ -502,7 +598,7 @@ float WarleyFBM2 (in float3 pos, const float lacunarity, const float persistence
 
 
 // range [0..inf]
-float  VoronoiContour (const float2 coord, const float seed)
+float  VoronoiContour (const float2 coord, const float2 seedScaleBias)
 {
 	// from https://www.shadertoy.com/view/ldl3W8
 	// The MIT License
@@ -519,7 +615,7 @@ float  VoronoiContour (const float2 coord, const float seed)
 	[[unroll]] for (int x = -1; x <= 1; ++x)
 	{
 		float2	cur	= float2(x, y);
-		float2	off	= DHash22( cur + ipoint + seed ) + cur - fpoint;
+		float2	off	= DHash22( (cur + ipoint) * seedScaleBias.x + seedScaleBias.y ) + cur - fpoint;
 		float	d	= Dot( off, off );
 
 		if ( d < md )
@@ -535,7 +631,7 @@ float  VoronoiContour (const float2 coord, const float seed)
 	[[unroll]] for (int x = -2; x <= 2; ++x)
 	{
 		float2	cur = icenter + float2(x, y);
-		float2	off	= DHash22( cur + ipoint + seed ) + cur - fpoint;
+		float2	off	= DHash22( (cur + ipoint) * seedScaleBias.x + seedScaleBias.y ) + cur - fpoint;
 		float	d   = Dot( mr - off, mr - off );
 		
 		if ( d > 0.00001 )
@@ -547,7 +643,7 @@ float  VoronoiContour (const float2 coord, const float seed)
 
 
 // range [0..inf]
-float  VoronoiCircles (const float2 coord, const float radiusScale, const float seed)
+float  VoronoiCircles (const float2 coord, const float radiusScale, const float2 seedScaleBias)
 {
 	// based on shader from https://www.shadertoy.com/view/ldl3W8
 	// The MIT License
@@ -567,7 +663,7 @@ float  VoronoiCircles (const float2 coord, const float radiusScale, const float 
 	[[unroll]] for (int x = -1; x <= 1; ++x)
 	{
 		float2	cur	= float2(x, y);
-		float2	off	= DHash22( cur + ipoint + seed ) + cur - fpoint;
+		float2	off	= DHash22( (cur + ipoint) * seedScaleBias.x + seedScaleBias.y ) + cur - fpoint;
 		float	d	= Dot( off, off );
 
 		if ( d < md )
@@ -585,7 +681,7 @@ float  VoronoiCircles (const float2 coord, const float radiusScale, const float 
 			continue;
 		
 		float2	cur = icenter + float2(x, y);
-		float2	off	= DHash22( cur + ipoint + seed ) + cur - fpoint;
+		float2	off	= DHash22( (cur + ipoint) * seedScaleBias.x + seedScaleBias.y ) + cur - fpoint;
 		float	d	= Dot( off, off );
 		
 		if ( d < mr )

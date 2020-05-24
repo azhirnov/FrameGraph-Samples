@@ -3,15 +3,12 @@
 #include "ShaderView.h"
 
 #include "scene/Loader/DevIL/DevILLoader.h"
+#include "scene/Loader/DDS/DDSLoader.h"
 #include "scene/Loader/Intermediate/IntermImage.h"
 
 #include "stl/Algorithms/StringUtils.h"
 #include "stl/Stream/FileStream.h"
 
-#ifdef FG_STD_FILESYSTEM
-#	include <filesystem>
-	namespace FS = std::filesystem;
-#endif
 
 namespace FG
 {
@@ -248,7 +245,7 @@ namespace FG
 	{
 		auto&	eye_data	= shader->_perEye[eye];
 		auto&	pass		= eye_data.passes[passIndex];
-		auto	view_size	= _frameGraph->GetDescription( pass.renderTarget ).dimension.xy();
+		uint2	view_size	= _frameGraph->GetDescription( pass.renderTarget ).dimension.xy();
 
 		// update uniform buffer
 		{
@@ -389,13 +386,23 @@ namespace FG
 		String	samplers;
 		for (auto& ch : shader->_channels)
 		{
-			EImage	type = _GetImageType( ch.name );
+			ImageID		image;
+			EImage		type	= EImage::Tex2D;	// 2D render target by default
+
+			if ( _LoadImage( cmdBuffer, ch.name, ch.flipY, OUT image ))
+			{
+				type = _frameGraph->GetDescription( image ).imageType;
+				_frameGraph->ReleaseResource( image );
+			}
 
 			if ( type == EImage::Tex2D )
 				samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler2D iChannel" << ToString(ch.index) << ";\n";
 			else
 			if ( type == EImage::Tex3D )
 				samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler3D iChannel" << ToString(ch.index) << ";\n";
+			else
+			if ( type == EImage::TexCube )
+				samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform samplerCube iChannel" << ToString(ch.index) << ";\n";
 			else
 			if ( type == EImage::Unknown )
 			{}
@@ -569,9 +576,9 @@ namespace FG
 
 					if ( iter->second == shader )
 						// use image from previous pass
-						image = ImageID{ shader->_perEye[eye].passes[(i-1) & 1].renderTarget.Get() };
+						image = _frameGraph->AcquireResource( shader->_perEye[eye].passes[(i-1) & 1].renderTarget );
 					else
-						image = ImageID{ iter->second->_perEye[eye].passes[i].renderTarget.Get() };
+						image = _frameGraph->AcquireResource( iter->second->_perEye[eye].passes[i].renderTarget );
 					
 					pass.resources.BindTexture( name, image, samp );
 					continue;
@@ -611,6 +618,7 @@ namespace FG
 		for (auto& eye_data : shader->_perEye)
 		{
 			_frameGraph->ReleaseResource( INOUT eye_data.renderTargetMS );
+			_frameGraph->ReleaseResource( INOUT eye_data.ubuffer );
 
 			for (auto& pass : eye_data.passes)
 			{
@@ -618,11 +626,9 @@ namespace FG
 			
 				for (auto& img : pass.images)
 				{
-					if ( img.IsValid() )
-						FG_UNUSED( img.Release() );
+					_frameGraph->ReleaseResource( INOUT img );
 				}
 			}
-			_frameGraph->ReleaseResource( INOUT eye_data.ubuffer );
 		}
 		shader->_perEye.clear();
 	}
@@ -771,20 +777,30 @@ namespace FG
 	Recompile
 =================================================
 */
-	bool  ShaderView::Recompile ()
+	bool  ShaderView::Recompile (const CommandBuffer &cmdBuffer)
 	{
 		for (auto& shader : _ordered)
 		{
 			String	samplers;
 			for (auto& ch : shader->_channels)
 			{
-				EImage	type = _GetImageType( ch.name );
+				ImageID		image;
+				EImage		type	= EImage::Tex2D;	// 2D render target by default
+
+				if ( _LoadImage( cmdBuffer, ch.name, ch.flipY, OUT image ))
+				{
+					type = _frameGraph->GetDescription( image ).imageType;
+					_frameGraph->ReleaseResource( image );
+				}
 
 				if ( type == EImage::Tex2D )
 					samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler2D iChannel" << ToString(ch.index) << ";\n";
 				else
 				if ( type == EImage::Tex3D )
 					samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler3D iChannel" << ToString(ch.index) << ";\n";
+				else
+				if ( type == EImage::TexCube )
+					samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform samplerCube iChannel" << ToString(ch.index) << ";\n";
 				else
 				if ( type == EImage::Unknown )
 				{}
@@ -913,26 +929,69 @@ namespace FG
 */
 	bool  ShaderView::_LoadImage (const CommandBuffer &cmdBuffer, const String &filename, bool flipY, OUT ImageID &id)
 	{
-#	ifdef FG_STD_FILESYSTEM
-		EImage		img_type = _GetImageType( filename );
+	#ifdef FS_HAS_FILESYSTEM
+		EImageType	img_type = _GetImageFileType( filename );
 		FS::path	fpath	 = FS::path{FG_DATA_PATH}.append(filename);
 
-		if ( img_type == EImage::Tex2D )
-			return _LoadImage2D( cmdBuffer, fpath.string(), flipY, OUT id );
-
-		if ( img_type == EImage::Tex3D )
+		BEGIN_ENUM_CHECKS()
+		switch ( img_type )
 		{
-			CHECK_ERR( not flipY );
-			return _LoadImage3D( cmdBuffer, fpath.string(), OUT id );
+			case EImageType::Unknown :	return false;
+			case EImageType::DevIL :	return _LoadImage2D( cmdBuffer, fpath.string(), flipY, OUT id );
+			case EImageType::DDS :		return _LoadDDS( cmdBuffer, fpath.string(), flipY, OUT id );
+			case EImageType::Raw3D :	CHECK_ERR( not flipY );	return _LoadImage3D( cmdBuffer, fpath.string(), OUT id );
 		}
+		END_ENUM_CHECKS();
 
 		RETURN_ERR( "unsupported image type" );
 
-#	else
+	#else
 		return false;
-#	endif
+	#endif
 	}
 	
+/*
+=================================================
+	_LoadDDS
+=================================================
+*/
+	bool  ShaderView::_LoadDDS (const CommandBuffer &cmdBuffer, const String &filename, bool flipY, OUT ImageID &id)
+	{
+	#ifdef FS_HAS_FILESYSTEM
+		CHECK( not flipY );
+		auto	iter = _imageCache.find( filename );
+		
+		if ( iter != _imageCache.end() and _frameGraph->IsResourceAlive( iter->second ))
+		{
+			id = _frameGraph->AcquireResource( iter->second );
+			return true;
+		}
+
+		DDSLoader		loader;
+		FS::path		fpath	{filename};
+		auto			image	= MakeShared<IntermImage>( fpath.string() );
+			
+		CHECK_ERR( loader.LoadImage( image, {}, null, flipY ));
+			
+		auto&	level	 = image->GetData()[0][0];
+		String	img_name = fpath.filename().string();
+
+		id = _frameGraph->CreateImage( ImageDesc{ image->GetType(), level.dimension, level.format, EImageUsage::Transfer | EImageUsage::Sampled },
+										Default, img_name );
+		CHECK_ERR( id );
+
+		_currTask = cmdBuffer->AddTask( UpdateImage{}.SetImage( id ).SetData( level.pixels, level.dimension, level.rowPitch, level.slicePitch ).DependsOn( _currTask ));
+			
+		_imageCache.insert_or_assign( filename, _frameGraph->AcquireResource(id) );
+		return true;
+
+	#else
+		FG_UNUSED( cmdBuffer, filename, flipY );
+		id = Default;
+		return false;
+	#endif
+	}
+
 /*
 =================================================
 	_LoadImage2D
@@ -940,13 +999,14 @@ namespace FG
 */
 	bool  ShaderView::_LoadImage2D (const CommandBuffer &cmdBuffer, const String &filename, bool flipY, OUT ImageID &id)
 	{
-#	if defined(FG_ENABLE_DEVIL) and defined(FG_STD_FILESYSTEM)
+	#if defined(FG_ENABLE_DEVIL) and defined(FS_HAS_FILESYSTEM)
+
 		String	name = filename + (flipY ? "|flip" : "");
 		auto	iter = _imageCache.find( name );
 		
-		if ( iter != _imageCache.end() )
+		if ( iter != _imageCache.end() and _frameGraph->IsResourceAlive( iter->second ))
 		{
-			id = ImageID{ iter->second.Get() };
+			id = _frameGraph->AcquireResource( iter->second );
 			return true;
 		}
 
@@ -966,14 +1026,14 @@ namespace FG
 		_currTask = cmdBuffer->AddTask( UpdateImage{}.SetImage( id ).SetData( level.pixels, level.dimension, level.rowPitch, level.slicePitch ).DependsOn( _currTask ));
 		_currTask = cmdBuffer->AddTask( GenerateMipmaps{}.SetImage( id ).SetRange( 0_mipmap, UMax ).DependsOn( _currTask ));
 
-		_imageCache.insert_or_assign( name, ImageID{id.Get()} );
+		_imageCache.insert_or_assign( name, _frameGraph->AcquireResource(id) );
 		return true;
-
-#	else
+		
+	#else
 		FG_UNUSED( cmdBuffer, filename, flipY );
 		id = Default;
 		return false;
-#	endif
+	#endif
 	}
 	
 /*
@@ -985,9 +1045,9 @@ namespace FG
 	{
 		auto	iter = _imageCache.find( filename );
 		
-		if ( iter != _imageCache.end() )
+		if ( iter != _imageCache.end() and _frameGraph->IsResourceAlive( iter->second ))
 		{
-			id = ImageID{ iter->second.Get() };
+			id = _frameGraph->AcquireResource( iter->second );
 			return true;
 		}
 
@@ -1020,7 +1080,7 @@ namespace FG
 		_currTask = cmdBuffer->AddTask( UpdateImage{}.SetImage( id ).SetData( buf, uint3{header[1], header[2], header[3]} ).DependsOn( _currTask ));
 		_currTask = cmdBuffer->AddTask( GenerateMipmaps{}.SetImage( id ).SetRange( 0_mipmap, UMax ).DependsOn( _currTask ));
 		
-		_imageCache.insert_or_assign( filename, ImageID{id.Get()} );
+		_imageCache.insert_or_assign( filename, _frameGraph->AcquireResource(id) );
 		return true;
 	}
 
@@ -1031,7 +1091,7 @@ namespace FG
 */
 	bool  ShaderView::_HasImage (StringView filename) const
 	{
-	#ifdef FG_STD_FILESYSTEM
+	#ifdef FS_HAS_FILESYSTEM
 		return FS::exists( FS::path{FG_DATA_PATH}.append(filename) );
 	#else
 		return true;
@@ -1040,23 +1100,30 @@ namespace FG
 	
 /*
 =================================================
-	_GetImageType
+	_GetImageFileType
 =================================================
 */
-	EImage  ShaderView::_GetImageType (StringView filename) const
+	ShaderView::EImageType  ShaderView::_GetImageFileType (StringView filename) const
 	{
-	#ifdef FG_STD_FILESYSTEM
+	#ifdef FS_HAS_FILESYSTEM
 		FS::path	fpath {filename};
+		auto		ext	= fpath.extension();
 
-		if ( fpath.extension() == ".bin" )
-			return EImage::Tex3D;
+		if ( ext == ".bin" )
+			return EImageType::Raw3D;
+		
+		if ( ext == ".dds" )
+			return EImageType::DDS;
+
+		if ( ext.empty() )
+			return EImageType::Unknown;
 
 		// TODO: cubemap
 
-		return EImage::Tex2D;
+		return EImageType::DevIL;
 
 	#else
-		return EImage::Unknown;
+		return EImageType::Unknown;
 	#endif
 	}
 

@@ -4,11 +4,6 @@
 #include "stl/Algorithms/StringUtils.h"
 #include "video/FFmpegRecorder.h"
 
-#ifdef FG_STD_FILESYSTEM
-#	include <filesystem>
-	namespace FS = std::filesystem;
-#endif
-
 namespace FG
 {
 

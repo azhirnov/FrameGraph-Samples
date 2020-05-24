@@ -4,6 +4,7 @@
 
 #include "ShaderView.h"
 #include "video/IVideoRecorder.h"
+#include "ui/ImguiRenderer.h"
 
 namespace FG
 {
@@ -21,6 +22,8 @@ namespace FG
 		using EViewMode		= ShaderView::EViewMode;
 		using ShaderDescr	= ShaderView::ShaderDescr;
 		using Microsec		= std::chrono::microseconds;
+		
+		using KeyStates_t	= StaticArray< EKeyAction, 3 >;
 
 
 	// variables
@@ -46,11 +49,20 @@ namespace FG
 		bool					_vrMirror		= false;
 		bool					_showTimemap	= false;
 		bool					_makeScreenshot	= false;
+		bool					_recompile		= false;
+		float					_sufaceScale	= 0.5f;
 
 		UniquePtr<IVideoRecorder>	_videoRecorder;
+		String						_screenshotDir;
 		
+		#ifdef FG_ENABLE_IMGUI
+		ImguiRenderer			_uiRenderer;
+		KeyStates_t				_mouseJustPressed;
+
+		bool					_settingsWndOpen	= true;
+		#endif
+
 		static inline const Rad			_cameraFov		= 60_deg;
-		static inline const float		_sufaceScale	= 0.5f;
 		static inline const float		_vrSufaceScale	= 1.0f;
 		static constexpr EPixelFormat	_imageFormat	= EPixelFormat::RGBA8_UNorm;
 
@@ -67,7 +79,6 @@ namespace FG
 	// BaseSceneApp
 	public:
 		bool  DrawScene () override;
-		void  OnUpdateFrameStat (OUT String &) const;
 
 
 	// IWindowEventListener
@@ -80,6 +91,10 @@ namespace FG
 		void  _OnPixelReadn (const uint2 &point, const ImageView &view);
 		void  _StartStopRecording ();
 		void  _ResetPosition ();
+		void  _ResetOrientation ();
+		
+		bool  _UpdateUI (const uint2 &dim);
+		bool  _UpdateInput ();
 
 		void  _SaveImage (const ImageView &view);
 	};

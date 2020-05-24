@@ -3,10 +3,18 @@
 #include "Application.h"
 #include "Shaders.h"
 #include "stl/Algorithms/StringUtils.h"
-#include "video/FFmpegRecorder.h"
-
 #include "stl/Algorithms/StringUtils.h"
 #include "stl/Stream/FileStream.h"
+
+#include "video/FFmpegRecorder.h"
+
+#include "scene/Loader/DevIL/DevILSaver.h"
+#include "scene/Loader/DDS/DDSSaver.h"
+#include "scene/Loader/Intermediate/IntermImage.h"
+
+#ifdef FG_ENABLE_IMGUI
+#	include "imgui_internal.h"
+#endif
 
 namespace FG
 {
@@ -87,8 +95,7 @@ namespace FG
 */
 	Application::~Application ()
 	{
-		if ( _videoRecorder )
-			CHECK( _videoRecorder->End() );
+		Destroy();
 	}
 
 /*
@@ -108,6 +115,20 @@ namespace FG
 			//cfg.enableDebugLayers	= false;
 			CHECK_ERR( _CreateFrameGraph( cfg ));
 		}
+		
+		// initialize imgui and renderer
+		#ifdef FG_ENABLE_IMGUI
+		{
+			IMGUI_CHECKVERSION();
+			ImGui::CreateContext();
+			ImGui::StyleColorsDark();
+
+			CHECK_ERR( _uiRenderer.Initialize( _frameGraph, GImGui ));
+			_mouseJustPressed.fill( EKeyAction::Up );
+		}
+		#endif
+
+		_screenshotDir = FG_DATA_PATH "screenshots";
 
 		_view.reset( new ShaderView{_frameGraph} );
 
@@ -142,7 +163,7 @@ namespace FG
 			if ( key == "[" )		--_nextSample;		else
 			if ( key == "]" )		++_nextSample;
 
-			if ( key == "R" )		_view->Recompile();
+			if ( key == "R" )		_recompile = true;
 			if ( key == "T" )		_frameCounter = 0;
 			if ( key == "P" )		_ResetPosition();
 
@@ -151,6 +172,7 @@ namespace FG
 
 			if ( key == "M" )		_vrMirror = not _vrMirror;
 			if ( key == "I" )		_makeScreenshot = true;
+			if ( key == "Y" )		_settingsWndOpen = not _settingsWndOpen;
 
 			// profiling
 			if ( key == "G" )		_view->RecordShaderTrace( GetMousePos() / vec2{GetSurfaceSize().x, GetSurfaceSize().y} );
@@ -162,6 +184,12 @@ namespace FG
 		{
 			if ( key == "U" )		_StartStopRecording();
 		}
+		
+	#ifdef FG_ENABLE_IMGUI
+		if ( key == "left mb" )		_mouseJustPressed[0] = action;
+		if ( key == "right mb" )	_mouseJustPressed[1] = action;
+		if ( key == "middle mb" )	_mouseJustPressed[2] = action;
+	#endif
 	}
 		
 /*
@@ -189,7 +217,6 @@ namespace FG
 			_view->ResetShaders();
 			_samples[_currSample]( _view.get() );
 		}
-
 
 		// update camera & view mode
 		{
@@ -239,6 +266,12 @@ namespace FG
 
 		CommandBuffer	cmdbuf = _frameGraph->Begin( CommandBufferDesc{ EQueueType::Graphics });
 		CHECK_ERR( cmdbuf );
+		
+		if ( _recompile )
+		{
+			_recompile = false;
+			_view->Recompile( cmdbuf );
+		}
 
 		if ( _viewMode != EViewMode::HMD_VR and _showTimemap )
 			cmdbuf->BeginShaderTimeMap( _targetSize, EShaderStages::Fragment );
@@ -309,7 +342,7 @@ namespace FG
 			// read pixel
 			if ( point.x < desc.dimension.x and point.y < desc.dimension.y )
 			{
-				cmdbuf->AddTask( ReadImage{}.SetImage( image_l, point, uint2{1,1} )
+				task = cmdbuf->AddTask( ReadImage{}.SetImage( image_l, point, uint2{1,1} )
 									.SetCallback( [this, point] (const ImageView &view) { _OnPixelReadn( point, view ); })
 									.DependsOn( task ));
 			}
@@ -317,7 +350,7 @@ namespace FG
 			// add video frame
 			if ( _videoRecorder )
 			{
-				cmdbuf->AddTask( ReadImage{}.SetImage( image_l, uint2(0), _targetSize )
+				task = cmdbuf->AddTask( ReadImage{}.SetImage( image_l, uint2(0), _targetSize )
 									.SetCallback( [this] (const ImageView &view)
 									{
 										if ( _videoRecorder )
@@ -330,7 +363,7 @@ namespace FG
 			if ( _makeScreenshot )
 			{
 				_makeScreenshot = false;
-				cmdbuf->AddTask( ReadImage{}.SetImage( image_l, uint2(0), _targetSize )
+				task = cmdbuf->AddTask( ReadImage{}.SetImage( image_l, uint2(0), _targetSize )
 									.SetCallback( [this] (const ImageView &view)
 									{
 										_SaveImage( view );
@@ -338,7 +371,37 @@ namespace FG
 									.DependsOn( task ));
 			}
 			
-			cmdbuf->AddTask( Present{ GetSwapchain(), image_l }.DependsOn( task ));
+			// copy to swapchain image
+			{
+				RawImageID	sw_image = cmdbuf->GetSwapchainImage( GetSwapchain() );
+				uint2		img_dim  = _frameGraph->GetDescription( image_l ).dimension.xy();
+				uint2		sw_dim   = _frameGraph->GetDescription( sw_image ).dimension.xy();
+
+				task = cmdbuf->AddTask( BlitImage{}.From( image_l ).To( sw_image ).SetFilter( EFilter::Linear )
+											.AddRegion( {}, int2(0), int2(img_dim), {}, int2(0), int2(sw_dim) )
+											.DependsOn( task ));
+			}
+
+			// draw ui
+			#ifdef FG_ENABLE_IMGUI
+			if ( _settingsWndOpen )
+			{
+				RawImageID	sw_image = cmdbuf->GetSwapchainImage( GetSwapchain() );
+
+				_UpdateUI( _frameGraph->GetDescription( sw_image ).dimension.xy() );
+
+				auto&	draw_data = *ImGui::GetDrawData();
+
+				if ( draw_data.TotalVtxCount > 0 )
+				{
+					LogicalPassID	pass_id = cmdbuf->CreateRenderPass( RenderPassDesc{ int2{float2{ draw_data.DisplaySize.x, draw_data.DisplaySize.y }} }
+													.AddViewport(float2{ draw_data.DisplaySize.x, draw_data.DisplaySize.y })
+													.AddTarget( RenderTargetID::Color_0, sw_image, EAttachmentLoadOp::Load, EAttachmentStoreOp::Store ));
+
+					task = _uiRenderer.Draw( cmdbuf, pass_id, {task} );
+				}
+			}
+			#endif
 
 			CHECK_ERR( _frameGraph->Execute( cmdbuf ));
 			CHECK_ERR( _frameGraph->Flush() );
@@ -346,16 +409,6 @@ namespace FG
 
 		_SetLastCommandBuffer( cmdbuf );
 		return true;
-	}
-	
-/*
-=================================================
-	OnUpdateFrameStat
-=================================================
-*/
-	void  Application::OnUpdateFrameStat (OUT String &str) const
-	{
-		str << ", Pixel: " << ToString( _selectedPixel );
 	}
 
 /*
@@ -366,6 +419,16 @@ namespace FG
 	void  Application::Destroy ()
 	{
 		_view.reset();
+		
+		#ifdef FG_ENABLE_IMGUI
+			_uiRenderer.Deinitialize( _frameGraph );
+		#endif
+
+		if ( _videoRecorder )
+		{
+			CHECK( _videoRecorder->End() );
+			_videoRecorder.reset();
+		}
 
 		_DestroyFrameGraph();
 	}
@@ -428,13 +491,266 @@ namespace FG
 	
 /*
 =================================================
+	_ResetOrientation
+=================================================
+*/
+	void  Application::_ResetOrientation ()
+	{
+		GetFPSCamera().SetRotation( Quat_Identity );
+	}
+
+/*
+=================================================
 	_SaveImage
 =================================================
 */
 	void  Application::_SaveImage (const ImageView &view)
 	{
-#	if defined(FG_ENABLE_DEVIL) and defined(FG_STD_FILESYSTEM)
-#	endif
+	#ifdef FS_HAS_FILESYSTEM
+		FS::create_directory( FS::path{ _screenshotDir });
+	#endif
+
+	#ifdef FS_HAS_FILESYSTEM
+		const auto	IsExists = [] (StringView path) { return FS::exists(FS::path{ path }); };
+	#else
+		const auto	IsExists = [] (StringView path) { return false; };	// TODO
+	#endif
+
+	#ifdef FG_ENABLE_DEVIL
+		const char	ext[] = ".png";
+		const auto	SaveImage = [] (StringView fname, const IntermImagePtr &image)
+		{
+			DevILSaver	saver;
+			return saver.SaveImage( fname, image );
+		};
+
+	#else
+		const char	ext[] = ".dds";
+		const auto	SaveImage = [] (StringView fname, const IntermImagePtr &image)
+		{
+			DDSSaver	saver;
+			return saver.SaveImage( fname, image );
+		};
+	#endif
+	
+
+		String	fname;
+		const auto	BuildName = [this, &fname, &ext] (uint index)
+		{
+			fname = String(_screenshotDir) << "/scr_" << ToString(index) << ext;
+		};
+		
+		auto		image		= MakeShared<IntermImage>( view );
+		uint		min_index	= 0;
+		uint		max_index	= 1;
+		const uint	step		= 100;
+
+		for (; min_index < max_index;)
+		{
+			BuildName( max_index );
+
+			if ( not IsExists( fname ))
+				break;
+
+			min_index = max_index;
+			max_index += step;
+		}
+
+		for (uint index = min_index; index <= max_index; ++index)
+		{
+			BuildName( index );
+
+			if ( IsExists( fname ))
+				continue;
+
+			CHECK( SaveImage( fname, image ));
+			
+			FG_LOGI( "screenshot saved to '"s << fname << "'" );
+			break;
+		}
 	}
+	
+/*
+=================================================
+	_UpdateUI
+=================================================
+*/
+	bool  Application::_UpdateUI (const uint2 &dim)
+	{
+	#ifdef FG_ENABLE_IMGUI
+		ImGuiIO &	io = ImGui::GetIO();
+		CHECK_ERR( io.Fonts->IsBuilt() );
+
+		io.DisplaySize	= ImVec2{float(dim.x), float(dim.y)};
+		io.DeltaTime	= FrameTime().count();
+
+		CHECK_ERR( _UpdateInput() );
+
+		const ImVec4	red_col		{ 0.5f, 0.0f, 0.0f, 1.0f };
+		const ImVec4	green_col	{ 0.0f, 0.7f, 0.0f, 1.0f };
+
+		ImGui::NewFrame();
+			
+		if ( ImGui::Begin( "Shader settings", &_settingsWndOpen ))
+		{
+			// camera
+			{
+				ImGui::Text( "W/S - move camera forward/backward" );
+				ImGui::Text( "A/D - move camera left/right" );
+				ImGui::Text( "V/C - move camera up/down" );
+				ImGui::Text( "Y   - show/hide UI" );
+			}
+			ImGui::Separator();
+			
+			// shader
+			{
+				ImGui::Text( "Switch shader" );
+
+				if ( ImGui::Button( " << ##PrevShader" ))
+					--_nextSample;
+			
+				ImGui::SameLine();
+
+				if ( ImGui::Button( " >> ##NextShader" ))
+					++_nextSample;
+			
+				// pause
+				{
+					String	text;
+
+					if ( _freeze ) {
+						text = "Resume (F)";
+						ImGui::PushStyleColor( ImGuiCol_Button, red_col );
+					} else {
+						text = "Pause (F)";
+						ImGui::PushStyleColor( ImGuiCol_Button, green_col );
+					}
+
+					if ( ImGui::Button( text.c_str() ))
+					{
+						_skipLastTime	= _freeze;
+						_freeze			= not _freeze;
+					}
+
+					ImGui::PopStyleColor(1);
+				}
+
+				// pause rendering
+				if ( ImGui::Button( "Stop rendering (space)" ))
+				{
+					_skipLastTime	= _pause;
+					_pause			= not _pause;
+				}
+
+				if ( ImGui::Button( "Reload (R)" ))
+					_recompile = true;
+
+				if ( ImGui::Button( "Restart (T)" ))
+					_frameCounter = 0;
+
+				if ( ImGui::Button( "Reset position (P)" ))
+					_ResetPosition();
+				
+				ImGui::SameLine();
+				
+				if ( ImGui::Button( "Reset orientation" ))
+					_ResetOrientation();
+
+				float	surf = _sufaceScale;
+				ImGui::Text( "Surface scale" );
+				ImGui::SliderFloat( "##SurfaceScaleSlider", &surf, 0.25f, 2.0f );
+
+				// can't change surface scale when capturing video
+				if ( not _videoRecorder )
+					_sufaceScale = surf;
+			}
+			ImGui::Separator();
+
+			// capture
+			{
+				// video
+				{
+					String	text;
+			
+					if ( _videoRecorder ) {
+						text = "Stop capture (U)";
+						ImGui::PushStyleColor( ImGuiCol_Button, red_col );
+					} else {
+						text = "Start capture (U)";
+						ImGui::PushStyleColor( ImGuiCol_Button, green_col );
+					}
+
+					if ( ImGui::Button( text.c_str() ))
+						_StartStopRecording();
+
+					ImGui::PopStyleColor(1);
+				}
+
+				if ( ImGui::Button( "Screenshot (I)" ))
+					_makeScreenshot = true;
+			}
+			ImGui::Separator();
+
+			// debugger
+			{
+				ImGui::Text( "G  - run shader debugger for pixel under cursor" );
+				ImGui::Text( "H  - run shader profiler for pixel under cursor" );
+				
+				if ( _showTimemap )
+					ImGui::PushStyleColor( ImGuiCol_Button, red_col );
+				else
+					ImGui::PushStyleColor( ImGuiCol_Button, green_col );
+
+				if ( ImGui::Button( "Timemap" ))
+					_showTimemap = not _showTimemap;
+
+				ImGui::PopStyleColor(1);
+			}
+			ImGui::Separator();
+
+			// params
+			{
+				ImGui::Text( ("position:    "s << ToString( GetCamera().transform.position )).c_str() );
+				ImGui::Text( ("rotation:    "s << ToString( GetCamera().transform.orientation )).c_str() );
+				ImGui::Text( ("mouse coord: "s << ToString( GetMousePos() )).c_str() );
+				ImGui::Text( ("pixel color: "s << ToString( _selectedPixel )).c_str() );
+			}
+		}
+
+		ImGui::End();
+		ImGui::Render();
+
+		return true;
+
+	#else
+		return true;
+	#endif
+	}
+
+/*
+=================================================
+	_UpdateInput
+=================================================
+*/
+	bool Application::_UpdateInput ()
+	{
+	#ifdef FG_ENABLE_IMGUI
+		ImGuiIO &	io = ImGui::GetIO();
+
+		for (size_t i = 0; i < _mouseJustPressed.size(); ++i)
+		{
+			io.MouseDown[i] = (_mouseJustPressed[i] != EKeyAction::Up);
+		}
+
+		io.MousePos = { GetMousePos().x, GetMousePos().y };
+
+		memset( io.NavInputs, 0, sizeof(io.NavInputs) );
+		return true;
+
+	#else
+		return true;
+	#endif
+	}
+
 
 }	// FG

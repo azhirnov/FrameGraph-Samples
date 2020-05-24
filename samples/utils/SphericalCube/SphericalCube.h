@@ -67,6 +67,7 @@ namespace FG
 		BufferID		_indexBuffer;
 		uint			_minLod			= 0;
 		uint			_maxLod			= 0;
+		bool			_quads			= false;
 
 
 	// methods
@@ -74,7 +75,7 @@ namespace FG
 		SphericalCube () {}
 		~SphericalCube ();
 
-		bool Create (const CommandBuffer &cmdbuf, uint minLod, uint maxLod);
+		bool Create (const CommandBuffer &cmdbuf, uint minLod, uint maxLod, bool quads);
 		void Destroy (const FrameGraph &fg);
 
 		ND_ DrawIndexed  Draw (uint lod) const;

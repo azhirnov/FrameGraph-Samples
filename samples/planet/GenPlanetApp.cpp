@@ -76,7 +76,7 @@ namespace {
 	{
 		const uint2		face_size { 1024, 1024 };
 
-		CHECK_ERR( _planet.cube.Create( cmdbuf, Lod, Lod ));
+		CHECK_ERR( _planet.cube.Create( cmdbuf, Lod, Lod, true ));
 
 		// create height map
 		if ( not _planet.heightMap )

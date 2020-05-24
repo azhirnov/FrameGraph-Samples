@@ -7,16 +7,14 @@ namespace FG
 {
 namespace {
 
-	static constexpr bool	UseQuads = true;
-
 	ND_ inline uint  CalcVertCount (uint lod)
 	{
 		return (lod+2) * (lod+2) * 6;
 	}
 	
-	ND_ inline uint  CalcIndexCount (uint lod)
+	ND_ inline uint  CalcIndexCount (uint lod, bool useQuads)
 	{
-		return 6*(UseQuads ? 4 : 6) * (lod+1) * (lod+1);
+		return 6*(useQuads ? 4 : 6) * (lod+1) * (lod+1);
 	}
 }
 //-----------------------------------------------------------------------------
@@ -41,17 +39,17 @@ namespace {
 	lod = x -- has {(x+1)*(x+2)*4 + x*x*2} vertices, (6*6*(x+1)^2) indices
 =================================================
 */
-	bool  SphericalCube::Create (const CommandBuffer &cmdbuf, uint minLod, uint maxLod)
+	bool  SphericalCube::Create (const CommandBuffer &cmdbuf, uint minLod, uint maxLod, bool quads)
 	{
 		CHECK_ERR( minLod <= maxLod );
 		CHECK_ERR( maxLod < 32 );
 		CHECK_ERR( cmdbuf );
 
 		FrameGraph	fg	= cmdbuf->GetFrameGraph();
-		Task		last_task;
 
 		Destroy( fg );
 		_minLod = minLod;	_maxLod = maxLod;
+		_quads = quads;
 
 		// calculate total memory size
 		uint64_t	vert_count	= 0;
@@ -60,7 +58,7 @@ namespace {
 		for (uint lod = minLod; lod <= maxLod; ++lod)
 		{
 			vert_count  += CalcVertCount( lod );
-			index_count += CalcIndexCount( lod );
+			index_count += CalcIndexCount( lod, _quads );
 		}
 
 		// create resources
@@ -78,7 +76,7 @@ namespace {
 		for (uint lod = minLod; lod <= maxLod; ++lod)
 		{
 			const BytesU	vert_size	= SizeOf<Vertex> * CalcVertCount( lod );
-			const BytesU	idx_size	= SizeOf<uint> * CalcIndexCount( lod );
+			const BytesU	idx_size	= SizeOf<uint> * CalcIndexCount( lod, _quads );
 			RawBufferID		staging_vb,	staging_ib;
 			BytesU			vb_offset,	ib_offset;
 			Vertex *		vb_mapped	= null;
@@ -87,8 +85,8 @@ namespace {
 			CHECK_ERR( cmdbuf->AllocBuffer( vert_size, SizeOf<Vertex>, OUT staging_vb, OUT vb_offset, OUT vb_mapped ));
 			CHECK_ERR( cmdbuf->AllocBuffer( idx_size, SizeOf<uint>, OUT staging_ib, OUT ib_offset, OUT ib_mapped ));
 			
-			last_task = cmdbuf->AddTask( CopyBuffer{}.From( staging_vb ).To( _vertexBuffer ).AddRegion( vb_offset, vert_offset, vert_size ).DependsOn( last_task ));
-			last_task = cmdbuf->AddTask( CopyBuffer{}.From( staging_ib ).To( _indexBuffer ).AddRegion( ib_offset, index_offset, idx_size ).DependsOn( last_task ));
+			cmdbuf->AddTask( CopyBuffer{}.From( staging_vb ).To( _vertexBuffer ).AddRegion( vb_offset, vert_offset, vert_size ));
+			cmdbuf->AddTask( CopyBuffer{}.From( staging_ib ).To( _indexBuffer ).AddRegion( ib_offset, index_offset, idx_size ));
 
 			vert_offset  += vert_size;
 			index_offset += idx_size;
@@ -111,7 +109,7 @@ namespace {
 					const uint	indices[4] = { vert_i + (x+0) + (y+0)*vcount, vert_i + (x+1) + (y+0)*vcount,
 											   vert_i + (x+0) + (y+1)*vcount, vert_i + (x+1) + (y+1)*vcount };
 					
-					if constexpr( UseQuads )
+					if ( quads )
 					{
 						ib_mapped[index_i++] = indices[0];	ib_mapped[index_i++] = indices[1];
 						ib_mapped[index_i++] = indices[3];	ib_mapped[index_i++] = indices[2];
@@ -199,14 +197,14 @@ namespace {
 		for (uint i = _minLod; i < lod; ++i)
 		{
 			vb_offset += SizeOf<Vertex> * CalcVertCount( i );
-			ib_offset += SizeOf<uint> * CalcIndexCount( i );
+			ib_offset += SizeOf<uint> * CalcIndexCount( i, _quads );
 		}
 
 		DrawIndexed		task;
 		task.SetVertexInput( GetAttribs() );
 		task.AddBuffer( Default, _vertexBuffer, vb_offset );
 		task.SetIndexBuffer( _indexBuffer, ib_offset, EIndex::UInt );
-		task.Draw( CalcIndexCount( lod ) );
+		task.Draw( CalcIndexCount( lod, _quads ) );
 		task.SetTopology( EPrimitive::TriangleList );
 		task.SetFrontFaceCCW( false );
 

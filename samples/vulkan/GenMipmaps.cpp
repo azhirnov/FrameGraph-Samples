@@ -1506,7 +1506,7 @@ void main()
 	imageStore( un_outImage, ivec2(gl_GlobalInvocationID.xy), color );
 }
 )#";
-		CHECK_ERR( spvCompiler.Compile( OUT proceduralImage.shader, vulkan, {comp_shader_source.data()}, "main", EShLangCompute ));
+		CHECK_ERR( spvCompiler.Compile( OUT proceduralImage.shader, vulkan, {comp_shader_source.c_str()}, "main", EShLangCompute ));
 	}
 	
 	// create descriptor set layout
@@ -1950,7 +1950,7 @@ void main()
 				"\t}\n\n";
 		}
 		comp_shader_source << "}\n";
-		CHECK_ERR( spvCompiler.Compile( OUT genCompute.shader, vulkan, {comp_shader_source.data()}, "main", EShLangCompute ));
+		CHECK_ERR( spvCompiler.Compile( OUT genCompute.shader, vulkan, {comp_shader_source.c_str()}, "main", EShLangCompute ));
 	}
 	
 	// create descriptor set layout

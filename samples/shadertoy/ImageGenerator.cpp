@@ -2,14 +2,9 @@
 
 #include "ImageGenerator.h"
 #include "stl/Algorithms/StringUtils.h"
-#include "scene/Saver/DDS/DDSSaver.h"
+#include "scene/Loader/DDS/DDSSaver.h"
 #include "scene/Loader/DDS/DDSLoader.h"
 #include "scene/Loader/Intermediate/IntermImage.h"
-
-#ifdef FG_STD_FILESYSTEM
-#	include <filesystem>
-	namespace FS = std::filesystem;
-#endif
 
 namespace FG
 {

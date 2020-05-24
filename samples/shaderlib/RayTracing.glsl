@@ -22,12 +22,12 @@ struct Ray
 */
 Ray  Ray_Create (const float3 origin, const float3 direction, const float tmin)
 {
-	Ray	result;
-	result.origin	= origin;
-	result.t		= tmin;
-	result.dir		= direction;
-	result.pos		= origin + direction * tmin;
-	return result;
+	Ray	ray;
+	ray.origin	= origin;
+	ray.t		= tmin;
+	ray.dir		= direction;
+	ray.pos		= FusedMulAdd( ray.dir, float3(ray.t), ray.origin );
+	return ray;
 }
 
 /*
@@ -51,8 +51,8 @@ Ray  Ray_FromScreen (const float3 origin, const quat rotation, const float fovX,
 	Ray	ray;
 	ray.origin	= origin;
 	ray.dir		= Normalize( QMul( rotation, Normalize( float3(uv.x, -uv.y, -0.5) )));
-	ray.pos		= origin + ray.dir * nearPlane;
 	ray.t		= nearPlane;
+	ray.pos		= FusedMulAdd( ray.dir, float3(ray.t), ray.origin );
 
 	return ray;
 }
@@ -75,8 +75,8 @@ Ray  Ray_From (const float3 leftBottom, const float3 rightBottom, const float3 l
 	Ray	ray;
 	ray.origin	= origin;
 	ray.dir		= Normalize( vec );
-	ray.pos		= ray.origin + ray.dir * nearPlane;
 	ray.t		= nearPlane;
+	ray.pos		= FusedMulAdd( ray.dir, float3(ray.t), ray.origin );
 
 	return ray;
 }
@@ -152,7 +152,7 @@ void  Ray_Rotate (inout Ray ray, const quat rotation)
 void  Ray_Move (inout Ray ray, const float length)
 {
 	ray.t   += length;
-	ray.pos  = ray.origin + ray.dir * ray.t;
+	ray.pos  = FusedMulAdd( ray.dir, float3(ray.t), ray.origin );
 }
 
 /*
@@ -163,7 +163,7 @@ void  Ray_Move (inout Ray ray, const float length)
 void  Ray_SetLength (inout Ray ray, const float length)
 {
 	ray.t   = length;
-	ray.pos = ray.origin + ray.dir * length;
+	ray.pos = FusedMulAdd( ray.dir, float3(length), ray.origin );
 }
 
 /*
@@ -174,30 +174,5 @@ void  Ray_SetLength (inout Ray ray, const float length)
 void  Ray_SetOrigin (inout Ray ray, const float3 origin)
 {
 	ray.origin	= origin;
-	ray.pos		= origin + ray.dir * ray.t;
-}
-
-/*
-=================================================
-	Ray_AABBIntersection
-=================================================
-*/
-bool  Ray_AABBIntersection (const float3 rayPos, const float3 rayDir, const float3 aabbMin, const float3 aabbMax, out float2 tBeginEnd)
-{
-	// from https://gamedev.stackexchange.com/questions/18436/most-efficient-aabb-vs-ray-collision-algorithms
-
-	float3	dirfrac	= 1.0 / rayDir;
-	float3	t135	= (aabbMin - rayPos) * dirfrac;
-	float3	t246	= (aabbMax - rayPos) * dirfrac;
-	float	tmin	= Max( Max( Min(t135[0], t246[0]), Min(t135[1], t246[1])), Min(t135[2], t246[2]) );
-	float	tmax	= Min( Min( Max(t135[0], t246[0]), Max(t135[1], t246[1])), Max(t135[2], t246[2]) );
-
-	if ( tmax < 0 )
-		return false;
-
-	if ( tmin > tmax )
-		return false;
-
-	tBeginEnd = float2( tmin, tmax );
-	return true;
+	ray.pos		= FusedMulAdd( ray.dir, float3(ray.t), origin );
 }

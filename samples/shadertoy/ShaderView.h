@@ -51,7 +51,7 @@ namespace FG
 
 		// methods
 			ShaderDescr () {}
-			ShaderDescr&  Pipeline (String &&file, String &&def = "")               	{ _pplnFilename = std::move(file);  _pplnDefines = std::move(def);  return *this; }
+			ShaderDescr&  Pipeline (String &&file, String def = "")		              	{ _pplnFilename = std::move(file);  _pplnDefines = std::move(def);  return *this; }
 			ShaderDescr&  SetScale (float value)										{ _surfaceScale = value;  return *this; }
 			ShaderDescr&  SetDimension (uint2 value)									{ _surfaceSize = value;  return *this; }
 			ShaderDescr&  SetFormat (EPixelFormat value)								{ _format = value;  return *this; }
@@ -64,6 +64,14 @@ namespace FG
 
 
 	private:
+
+		enum class EImageType
+		{
+			Unknown,
+			DevIL,
+			DDS,
+			Raw3D,
+		};
 		
 		struct ShadertoyUB
 		{
@@ -202,7 +210,7 @@ namespace FG
 		void  AddShader (const String &name, ShaderDescr &&desc);
 		void  AddShader (String &&fname);
 
-		bool  Recompile ();
+		bool  Recompile (const CommandBuffer &cmd);
 		void  ResetShaders ();
 
 		void  SetMode (const uint2 &viewSize, EViewMode mode);
@@ -235,9 +243,11 @@ namespace FG
 
 		bool _LoadImage (const CommandBuffer &cmd, const String &filename, bool flipY, OUT ImageID &id);
 		bool _LoadImage2D (const CommandBuffer &cmd, const String &filename, bool flipY, OUT ImageID &id);
+		bool _LoadDDS (const CommandBuffer &cmd, const String &filename, bool flipY, OUT ImageID &id);
 		bool _LoadImage3D (const CommandBuffer &cmd, const String &filename, OUT ImageID &id);
 		bool _HasImage (StringView filename) const;
-		EImage _GetImageType (StringView filename) const;
+
+		EImageType   _GetImageFileType (StringView filename) const;
 
 		GPipelineID  _Compile (StringView name, StringView defs, StringView samplers) const;
 		GPipelineID  _CreateDefault (StringView samplers) const;

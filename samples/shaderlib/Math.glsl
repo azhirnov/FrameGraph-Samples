@@ -53,6 +53,7 @@
 #define Exp2			exp2
 #define Fract			fract
 #define Floor			floor
+#define FusedMulAdd		fma		// (a * b) + c
 #define IsNaN			isnan
 #define IsInfinity		isinf
 #define IsFinite( x )	(! IsInfinity( x ) && ! IsNaN( x ))
@@ -93,11 +94,16 @@
 #define OUT
 #define INOUT
 
+
+//-----------------------------------------------------------------------------
+// Comparison
+
 #define Less			lessThan			// <
 #define Greater			greaterThan			// >
 #define LessEqual		lessThanEqual		// <=
 #define GreaterEqual	greaterThanEqual	// >=
 #define Not				not
+#define not				!
 
 bool  Equals (const float  lhs, const float  rhs)  { return lhs == rhs; }
 bool2 Equals (const float2 lhs, const float2 rhs)  { return equal( lhs, rhs ); }
@@ -146,10 +152,17 @@ bool4 Equals (const double4 lhs, const double4 rhs)  { return equal( lhs, rhs );
 #define Max4( a, b, c, d )		Max( Max( (a), (b) ), Max( (c), (d) ))
 
 
-float  Epsilon ()	{ return 0.00001f; }
-float  Pi ()		{ return 3.14159265358979323846f; }
-float  Pi2 ()		{ return Pi() * 2.0; }
+//-----------------------------------------------------------------------------
+// Constants
 
+float  Epsilon ()		{ return 0.00001f; }
+float  Pi ()			{ return 3.14159265358979323846f; }
+float  Pi2 ()			{ return Pi() * 2.0; }
+float  ReciporalPi ()	{ return 0.31830988618379067153f; }
+float  SqrtOf2 ()		{ return 1.41421356237309504880f; }
+
+
+//-----------------------------------------------------------------------------
 
 float  Sign (const float x)  { return  x < 0.0 ? -1.0 : 1.0; }
 int    Sign (const int x)    { return  x < 0 ? -1 : 1; }
@@ -166,15 +179,15 @@ float2 Square (const float2 x)	{ return x * x; }
 float3 Square (const float3 x)	{ return x * x; }
 float4 Square (const float4 x)	{ return x * x; }
 
-int   Square (const int x)		{ return x * x; }
-int2  Square (const int2 x)		{ return x * x; }
-int3  Square (const int3 x)		{ return x * x; }
-int4  Square (const int4 x)		{ return x * x; }
+int    Square (const int x)		{ return x * x; }
+int2   Square (const int2 x)	{ return x * x; }
+int3   Square (const int3 x)	{ return x * x; }
+int4   Square (const int4 x)	{ return x * x; }
 
-uint  Square (const uint x)		{ return x * x; }
-uint2 Square (const uint2 x)	{ return x * x; }
-uint3 Square (const uint3 x)	{ return x * x; }
-uint4 Square (const uint4 x)	{ return x * x; }
+uint   Square (const uint x)	{ return x * x; }
+uint2  Square (const uint2 x)	{ return x * x; }
+uint3  Square (const uint3 x)	{ return x * x; }
+uint4  Square (const uint4 x)	{ return x * x; }
 
 
 //-----------------------------------------------------------------------------
@@ -273,6 +286,24 @@ float4 Wrap (const float4 v, const float minVal, const float maxVal) {
 				   Wrap( v.y, minVal, maxVal ),
 				   Wrap( v.z, minVal, maxVal ),
 				   Wrap( v.w, minVal, maxVal ));
+}
+
+float2 Wrap (const float2 v, const float2 minVal, const float2 maxVal) {
+	return float2( Wrap( v.x, minVal.x, maxVal.y ),
+				   Wrap( v.y, minVal.x, maxVal.y ));
+}
+
+float3 Wrap (const float3 v, const float3 minVal, const float3 maxVal) {
+	return float3( Wrap( v.x, minVal.x, maxVal.x ),
+				   Wrap( v.y, minVal.y, maxVal.y ),
+				   Wrap( v.z, minVal.z, maxVal.z ));
+}
+
+float4 Wrap (const float4 v, const float4 minVal, const float4 maxVal) {
+	return float4( Wrap( v.x, minVal.x, maxVal.x ),
+				   Wrap( v.y, minVal.y, maxVal.y ),
+				   Wrap( v.z, minVal.z, maxVal.z ),
+				   Wrap( v.w, minVal.w, maxVal.w ));
 }
 
 int2 Wrap (const int2 v, const float minVal, const float maxVal) {
