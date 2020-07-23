@@ -10,6 +10,7 @@ set( FG_ENABLE_DEVIL ON CACHE INTERNAL "" FORCE )
 set( FG_ENABLE_FREEIMAGE OFF CACHE INTERNAL "" FORCE )
 set( FG_ENABLE_STB ON CACHE BOOL "" FORCE )
 set( FG_ENABLE_TINYOBJ ON CACHE BOOL "" FORCE )
+set( FG_ENABLE_IMGUI ON CACHE BOOL "" FORCE )
 
 add_subdirectory( "FrameGraph" )
 
@@ -48,8 +49,9 @@ include( "${CMAKE_CURRENT_SOURCE_DIR}/cmake/download_stb.cmake" )
 include( "${CMAKE_CURRENT_SOURCE_DIR}/cmake/download_tinyobj.cmake" )
 
 add_subdirectory( "samples/clouds" )
+add_subdirectory( "samples/particles" )
 add_subdirectory( "samples/planet" )
 add_subdirectory( "samples/ray_tracing" )
-add_subdirectory( "samples/utils" )
 add_subdirectory( "samples/shadertoy" )
+add_subdirectory( "samples/utils" )
 add_subdirectory( "samples/vulkan" )

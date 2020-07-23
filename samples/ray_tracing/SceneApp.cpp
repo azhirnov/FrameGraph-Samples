@@ -9,6 +9,8 @@
 
 namespace FG
 {
+
+#define SCENE_PATH	FG_DATA_PATH "../../_data/"
 	
 /*
 =================================================
@@ -86,13 +88,13 @@ namespace FG
 		AssimpLoader			loader;
 		AssimpLoader::Config	cfg;
 
-		IntermScenePtr	sponza = loader.Load( cfg, FG_DATA_PATH "sponza/sponza.gltf" );
+		IntermScenePtr	sponza = loader.Load( cfg, SCENE_PATH "sponza/sponza.gltf" );
 		CHECK_ERR( sponza );
 		
 		DevILLoader		img_loader;
-		CHECK_ERR( img_loader.Load( sponza, {FG_DATA_PATH "sponza"}, _scene->GetImageCache() ));
+		CHECK_ERR( img_loader.Load( sponza, {SCENE_PATH "sponza"}, _scene->GetImageCache() ));
 		
-		IntermScenePtr	bunny = loader.Load( cfg, FG_DATA_PATH "bunny/bunny.obj" );
+		IntermScenePtr	bunny = loader.Load( cfg, SCENE_PATH "bunny/bunny.obj" );
 		CHECK_ERR( bunny );
 		
 		// setup material

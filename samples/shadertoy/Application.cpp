@@ -257,6 +257,8 @@ namespace FG
 
 			_view->SetMode( _targetSize, _viewMode );
 			_view->SetMouse( GetMousePos() / vec2(VecCast(GetSurfaceSize())), IsMousePressed() );
+
+			_view->SetSliderState( _sliders );
 		}
 
 
@@ -663,6 +665,16 @@ namespace FG
 				// can't change surface scale when capturing video
 				if ( not _videoRecorder )
 					_sufaceScale = surf;
+			}
+			ImGui::Separator();
+
+			// custom sliders
+			{
+				ImGui::Text( "Custom sliders:" );
+				ImGui::SliderFloat( "##CustomSlider0", &_sliders[0], 0.0f, 1.0f );
+				ImGui::SliderFloat( "##CustomSlider1", &_sliders[1], 0.0f, 1.0f );
+				ImGui::SliderFloat( "##CustomSlider2", &_sliders[2], 0.0f, 1.0f );
+				ImGui::SliderFloat( "##CustomSlider3", &_sliders[3], 0.0f, 1.0f );
 			}
 			ImGui::Separator();
 

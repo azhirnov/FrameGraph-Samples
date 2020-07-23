@@ -12,6 +12,7 @@
 `G` - run shader debugger for pixel under cursor<br/>
 `H` - run shader profiler for pixel under cursor<br/>
 `J` - show/hide shader timemap<br/>
+'Y' - show/hide UI
 `space` - pause rendering<br/>
 `escape` - exit<br/>
 `left mouse button` - rotate by mouse<br/>

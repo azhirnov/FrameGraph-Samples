@@ -2,6 +2,7 @@
 
 #include "Application.h"
 #include "OfflineVideoApp.h"
+#include "ImageGenerator.h"
 #include "Shaders.h"
 
 /*

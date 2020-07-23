@@ -102,6 +102,16 @@ namespace FG
 		_rightHand = right;
 		_ubData.iControllerMask = mask;
 	}
+	
+/*
+=================================================
+	SetSliderState
+=================================================
+*/
+	void  ShaderView::SetSliderState (const vec4 &value)
+	{
+		_ubData.iSliders = value;
+	}
 
 /*
 =================================================
@@ -685,6 +695,7 @@ namespace FG
 				int		iControllerMask;
 				mat4x4	iLeftControllerPose;	// VR controllers
 				mat4x4	iRightControllerPose;
+				vec4	iSliders;
 			};
 
 			layout(location=0) out vec4	out_Color;
@@ -779,6 +790,8 @@ namespace FG
 */
 	bool  ShaderView::Recompile (const CommandBuffer &cmdBuffer)
 	{
+		FG_LOGI( "\n========================= Recompile shaders =========================\n" );
+
 		for (auto& shader : _ordered)
 		{
 			String	samplers;
@@ -1092,7 +1105,7 @@ namespace FG
 	bool  ShaderView::_HasImage (StringView filename) const
 	{
 	#ifdef FS_HAS_FILESYSTEM
-		return FS::exists( FS::path{FG_DATA_PATH}.append(filename) );
+		return FS::exists( FS::path{FG_DATA_PATH}.append( filename.begin(), filename.end() ));
 	#else
 		return true;
 	#endif

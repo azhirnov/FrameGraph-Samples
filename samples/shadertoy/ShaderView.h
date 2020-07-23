@@ -102,6 +102,7 @@ namespace FG
 			int			_padding8[3];
 			mat4x4		iLeftControllerPose;	// VR controllers
 			mat4x4		iRightControllerPose;
+			vec4		iSliders;
 		};
 
 
@@ -222,6 +223,7 @@ namespace FG
 		void  RecordShaderTrace (const vec2 &coord);
 		void  RecordShaderProfiling (const vec2 &coord);
 		void  SetControllerPose (const mat4x4 &left, const mat4x4 &right, uint mask);
+		void  SetSliderState (const vec4 &value);
 
 		ND_ DrawResult_t  Draw (const CommandBuffer &cmd, uint frameId, SecondsF time, SecondsF dt);
 

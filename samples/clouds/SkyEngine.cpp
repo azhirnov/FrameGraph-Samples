@@ -1,7 +1,5 @@
 #include "SkyEngine.h"
-#include <filesystem>
-
-namespace FS = std::filesystem;
+#include "stl/Stream/FileStream.h"
 
 namespace FG
 {
@@ -35,7 +33,7 @@ namespace FG
 		// set path to resources
 		{
 			std::error_code	err;
-			FS::current_path( FS::path{ FG_DATA_PATH }, err );
+			FS::current_path( FS::path{FG_DATA_PATH}, err );
 		}
 
 		{

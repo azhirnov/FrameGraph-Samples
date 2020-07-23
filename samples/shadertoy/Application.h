@@ -51,6 +51,7 @@ namespace FG
 		bool					_makeScreenshot	= false;
 		bool					_recompile		= false;
 		float					_sufaceScale	= 0.5f;
+		vec4					_sliders		{0.0f};
 
 		UniquePtr<IVideoRecorder>	_videoRecorder;
 		String						_screenshotDir;
@@ -58,7 +59,6 @@ namespace FG
 		#ifdef FG_ENABLE_IMGUI
 		ImguiRenderer			_uiRenderer;
 		KeyStates_t				_mouseJustPressed;
-
 		bool					_settingsWndOpen	= true;
 		#endif
 
