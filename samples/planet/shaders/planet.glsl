@@ -1,24 +1,36 @@
 // Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_control_flow_attributes : require
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
+
+#include "Math.glsl"
 
 #define SH_VERTEX			(1 << 0)
 #define SH_TESS_CONTROL		(1 << 1)
 #define SH_TESS_EVALUATION	(1 << 2)
 #define SH_FRAGMENT			(1 << 3)
 
-#define USE_QUADS	1
-
 #if SHADER & (SH_TESS_CONTROL | SH_TESS_EVALUATION | SH_FRAGMENT)
-layout(binding=0, std140) uniform un_PlanetData
+struct Material
 {
-	mat4x4		viewProj;
-	vec4		position;
-	vec2		clipPlanes;
+	float		specular;
+	float		roughtness;
+	float		metallic;
+};
 
-	vec3		lightDirection;	// temp
+layout(set=0, binding=0, std140) uniform un_PlanetData
+{
+	float4x4	viewProj;
+	float4		position;
+	float2		clipPlanes;
 	float		tessLevel;
+	float		radius;
+
+	float3		lightDirection;	// temp
+
+	//Material	materials [256];
 } ub;
 #endif
 //-----------------------------------------------------------------------------
@@ -26,14 +38,14 @@ layout(binding=0, std140) uniform un_PlanetData
 
 
 #if SHADER & SH_VERTEX
-layout(location=0) in vec3  at_Position;
-layout(location=1) in vec3  at_TextureUV;
+layout(location=0) in float3  at_Position;
+layout(location=1) in float3  at_TextureUV;
 
-layout(location=0) out vec3  out_Texcoord;
+layout(location=0) out float3  out_Texcoord;
 
 void main ()
 {
-	gl_Position  = vec4(at_Position.xyz, 1.0f);
+	gl_Position  = float4(at_Position.xyz, 1.0f);
 	out_Texcoord = at_TextureUV.xyz;
 }
 #endif	// SH_VERTEX
@@ -44,8 +56,8 @@ void main ()
 #if USE_QUADS && (SHADER & SH_TESS_CONTROL)
 layout(vertices = 4) out;
 
-layout(location=0) in  vec3  in_Texcoord[];
-layout(location=0) out vec3  out_Texcoord[];
+layout(location=0) in  float3  in_Texcoord[];
+layout(location=0) out float3  out_Texcoord[];
 
 void main ()
 {
@@ -70,8 +82,8 @@ void main ()
 #if !USE_QUADS && (SHADER & SH_TESS_CONTROL)
 layout(vertices = 3) out;
 
-layout(location=0) in  vec3  in_Texcoord[];
-layout(location=0) out vec3  out_Texcoord[];
+layout(location=0) in  float3  in_Texcoord[];
+layout(location=0) out float3  out_Texcoord[];
 
 void main ()
 {
@@ -92,10 +104,10 @@ void main ()
 
 
 #if SHADER & SH_TESS_EVALUATION
-layout(binding=1) uniform samplerCube  un_HeightMap;
+layout(set=0, binding=1) uniform samplerCube  un_HeightMap;
 
-layout(location=0) in  vec3  in_Texcoord[];
-layout(location=0) out vec3  out_Texcoord;
+layout(location=0) in  float3  in_Texcoord[];
+layout(location=0) out float3  out_Texcoord;
 
 # if USE_QUADS
 	layout(quads, equal_spacing, ccw) in;
@@ -118,13 +130,13 @@ layout(location=0) out vec3  out_Texcoord;
 
 void main ()
 {
-	vec3	texc	= Interpolate( in_Texcoord, );
+	float3	texc	= Interpolate( in_Texcoord, );
 	float	height	= texture( un_HeightMap, texc ).r;
-	vec4	pos		= Interpolate( gl_in, .gl_Position );
-	vec3	surf_n	= normalize( pos.xyz );
+	float4	pos		= Interpolate( gl_in, .gl_Position );
+	float3	surf_n	= normalize( pos.xyz );
 	
 	out_Texcoord = texc;
-	pos.xyz		 = surf_n * (1.0 + height);
+	pos.xyz		 = surf_n * ub.radius * (1.0 + height);
 	gl_Position	 = ub.viewProj * (ub.position + pos);
 }
 #endif	// SH_TESS_EVALUATION
@@ -133,20 +145,23 @@ void main ()
 
 
 #if SHADER & SH_FRAGMENT
-layout(location=0) out vec4  out_Color;
+layout(location=0) out float4  out_Color;
 
-layout(binding=2) uniform samplerCube  un_NormalMap;
-layout(binding=3) uniform samplerCube  un_ColorMap;
+layout(set=0, binding=2) uniform samplerCube  un_NormalMap;
+layout(set=0, binding=3) uniform samplerCube  un_AlbedoMap;
+layout(set=0, binding=4) uniform samplerCube  un_EmissionMap;
 
-layout(location=0) in vec3  in_Texcoord;
+layout(location=0) in float3  in_Texcoord;
 
 void main ()
 {
-	vec3	norm	 = texture( un_NormalMap, in_Texcoord ).xyz;
+	float3	norm	 = texture( un_NormalMap, in_Texcoord ).xyz;
 	float	lighting = clamp( dot( norm, ub.lightDirection ), 0.2, 1.0 );
 
-	out_Color = vec4( norm * 0.5 + 0.5, 1.0 );
-	//out_Color = texture( un_ColorMap, in_Texcoord );
+	//out_Color = float4( norm * 0.5 + 0.5, 1.0 );
+	float3	albedo	= texture( un_AlbedoMap, in_Texcoord ).rgb;
+
+	out_Color = float4( albedo * lighting, 1.0 );
 }
 #endif	// SH_FRAGMENT
 //-----------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+// Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 
 #extension GL_GOOGLE_include_directive : require
 #extension GL_KHR_memory_scope_semantics : require
@@ -18,26 +19,23 @@ layout(push_constant, std140) uniform PushConst {
 } pc;
 
 // @discard
-layout(binding=0) writeonly restrict uniform image2D  un_OutHeight;
+layout(set=0, binding=0) writeonly restrict uniform image2D  un_OutHeight;
 
 // @discard
-layout(binding=1) writeonly restrict uniform image2D  un_OutNormal;
+layout(set=0, binding=1) writeonly restrict uniform image2D  un_OutNormal;
 
 
 float FBM (in float3 coord)
 {
-	const float3x3 m = float3x3( 0.00,  0.80,  0.60, -0.80,  0.36, -0.48, -0.60, -0.48,  0.64 );
-
 	float	total		= 0.0;
 	float	amplitude	= 1.0;
 	float	freq		= 1.0;
 
 	for (int i = 0; i < 7; ++i)
 	{
-		total += GradientNoise( coord*freq ) * amplitude;
-		//coord = m * coord;
-		freq *= 2.5;
-		amplitude *= 0.5;
+		total 		+= GradientNoise( coord*freq ) * amplitude;
+		freq 		*= 2.5;
+		amplitude 	*= 0.5;
 	}
 	return total;
 }
@@ -47,17 +45,13 @@ float4 GetPosition (const int2 coord)
 {
 	float2	ncoord	= ToSNorm( float2(coord) / float2(pc.faceDim - 1) );
 	float3	pos		= PROJECTION( ncoord, pc.face );
-	
 	float	height	= FBM( pos ) * 0.04;
-	//float	height	= SDF_Sphere( Fract( pos * 4.0 ) - 0.5, 0.25 ) * 0.1;
-	//float	height	= GradientNoise( pos * 4.251 ) * 0.1;
-
 	return float4( pos, height );
 }
 
 
 // positions with 1 pixel border for normals calculation
-shared float3 s_Positions[ gl_WorkGroupSize.x * gl_WorkGroupSize.y ];
+shared float3  s_Positions[ gl_WorkGroupSize.x * gl_WorkGroupSize.y ];
 
 float3  ReadPosition (int2 local)
 {
@@ -77,11 +71,12 @@ void main ()
 	const bool4		is_active	= bool4( greaterThanEqual( local, int2(0) ), lessThan( local, lsize ));
 
 	s_Positions[ gl_LocalInvocationIndex ] = pos;
+	memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsRelease );
 
 	if ( All( is_active ))
 	{
 		barrier();
-		memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsAcquireRelease );
+		memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsAcquire );
 
 		const int3		offset	= int3(-1, 0, 1);
 		const float3	v0		= ReadPosition( local + offset.xx );

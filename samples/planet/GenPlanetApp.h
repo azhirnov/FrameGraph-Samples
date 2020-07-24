@@ -16,46 +16,54 @@ namespace FG
 	{
 	// types
 	private:
-		struct PlanetData
-		{
-			mat4x4		viewProj;
-			vec4		position;
-			vec2		clipPlanes;
-			float		_padding[2];
+		using Mat3x3_t	= Matrix< float, 3, 3, EMatrixOrder::ColumnMajor, sizeof(float4) >;
 
-			vec3		lightDirection;
-			float		tessLevel;
+		struct PlanetMaterial
+		{
 		};
 
-		struct PlanetEditorPC
+		struct PlanetData
 		{
-			float2		center;
-			float		radius;
+			mat4x4			viewProj;
+			vec4			position;
+			vec2			clipPlanes;
+			float			tessLevel;
+			float			radius;
+
+			vec3			lightDirection;
+			float			_padding[1];
+
+			//PlanetMaterial	materials [256];
 		};
 
 
 	// variables
 	private:
+		ImageID					_colorBuffer;
 		ImageID					_depthBuffer;
 
 		struct {
 			SphericalCube			cube;
 			ImageID					heightMap;
 			ImageID					normalMap;
-			ImageID					dbgColorMap;
+			ImageID					albedoMap;		// albedo, material id
+			ImageID					emissionMap;	// temperature, emission
 			BufferID				ubuffer;
 			GPipelineID				pipeline;
 			PipelineResources		resources;
 		}						_planet;
 
 		struct {
-			CPipelineID				pipeline;
-			PipelineResources		resources;
-		}						_generator;
+		}						_atmosphere;
 
 		RawSamplerID			_linearSampler;
+		RawSamplerID			_linearClampSampler;
 
 		bool					_recreatePlanet	= true;
+		bool					_showTimemap	= false;
+		Optional<vec2>			_debugPixel;
+
+		const float				_surfaceScale = 0.5f;
 
 		
 	// methods
@@ -63,23 +71,23 @@ namespace FG
 		GenPlanetApp () {}
 		~GenPlanetApp ();
 
-		bool Initialize ();
+		bool  Initialize ();
 
 
 	// BaseSceneApp
 	private:
-		bool DrawScene () override;
+		bool  DrawScene () override;
 		
 
 	// IWindowEventListener
 	private:
-		void OnResize (const uint2 &size) override;
-		void OnKey (StringView, EKeyAction) override;
+		void  OnKey (StringView, EKeyAction) override;
 
 
 	private:
-		bool _CreatePlanet (const CommandBuffer &);
-		bool _GenerateHeightMap (const CommandBuffer &);
+		bool  _CreatePlanet (const CommandBuffer &);
+		bool  _GenerateHeightMap (const CommandBuffer &);
+		bool  _GenerateColorMap (const CommandBuffer &);
 		
 		ND_ static String  _LoadShader (StringView filename);
 	};

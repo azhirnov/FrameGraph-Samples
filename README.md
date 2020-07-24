@@ -11,7 +11,12 @@ Experiments with ray tracing extension.
 - [ ] PBR
 ![image](screenshots/ray_tracing.jpg)
 
-used glTF Sponza from https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/Sponza
+used glTF Sponza from [glTF-Sample-Models](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/Sponza)
+
+
+## Particles
+Particles in gravitational and magnetic fields.
+![image](screenshots/particles.jpg)
 
 
 ## Planet rendering
