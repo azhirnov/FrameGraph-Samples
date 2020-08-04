@@ -1561,7 +1561,7 @@ void main()
 		ds_info.pSetLayouts			= &clearCompute.dsLayout;
 		VK_CHECK( vkAllocateDescriptorSets( vulkan.GetVkDevice(), &ds_info, OUT &clearCompute.descSet ));
 
-		clearCompute.groupCount = Max( (imageSize + local_size-1) / local_size, 1u );
+		clearCompute.groupCount = Max( IntCeil( imageSize, local_size ), 1u );
 
 		VkDescriptorImageInfo	img_info = {};
 		img_info.imageLayout	= VK_IMAGE_LAYOUT_GENERAL;

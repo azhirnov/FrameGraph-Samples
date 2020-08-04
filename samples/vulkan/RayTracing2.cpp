@@ -365,7 +365,7 @@ bool RayTracingApp2::Run ()
 				vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, rtPipeline );
 				vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pplnLayout, 0, 1, &descriptorSet[frameId], 0, null );
 
-				VkDeviceSize	stride = vulkan.GetDeviceRayTracingProperties().shaderGroupHandleSize;
+				VkDeviceSize	stride = vulkan.GetDeviceRayTracingProperties().shaderGroupBaseAlignment;
 
 				vkCmdTraceRaysNV( cmd, 
 								   shaderBindingTable, RAYGEN_SHADER * stride,
@@ -914,10 +914,13 @@ bool RayTracingApp2::CreateTopLevelAS (ResourceInit &res)
 */
 bool RayTracingApp2::CreateBindingTable (ResourceInit &res)
 {
+	VkDeviceSize	stride		= vulkan.GetDeviceRayTracingProperties().shaderGroupHandleSize;
+	VkDeviceSize	alignment	= Max( stride, vulkan.GetDeviceRayTracingProperties().shaderGroupBaseAlignment );
+
 	VkBufferCreateInfo	info = {};
 	info.sType			= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	info.flags			= 0;
-	info.size			= NUM_GROUPS * vulkan.GetDeviceRayTracingProperties().shaderGroupHandleSize;
+	info.size			= NUM_GROUPS * alignment;
 	info.usage			= VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
 	info.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;
 
@@ -936,13 +939,16 @@ bool RayTracingApp2::CreateBindingTable (ResourceInit &res)
 		return true;
 	});
 
-	res.onDraw.push_back( [this, size = info.size] (VkCommandBuffer cmd)
+	res.onDraw.push_back( [this, stride, alignment] (VkCommandBuffer cmd)
 	{
-		Array<uint8_t>	handles;  handles.resize(size);
+		Array<uint8_t>	handles;  handles.resize( stride * NUM_GROUPS );
 
 		VK_CALL( vkGetRayTracingShaderGroupHandlesNV( vulkan.GetVkDevice(), rtPipeline, 0, NUM_GROUPS, handles.size(), OUT handles.data() ));
 		
-		vkCmdUpdateBuffer( cmd, shaderBindingTable, 0, handles.size(), handles.data() );
+		vkCmdUpdateBuffer( cmd, shaderBindingTable, alignment * RAYGEN_SHADER,	stride, handles.data() + BytesU{stride * RAYGEN_SHADER} );
+		vkCmdUpdateBuffer( cmd, shaderBindingTable, alignment * HIT_SHADER_1,	stride, handles.data() + BytesU{stride * HIT_SHADER_1} );
+		vkCmdUpdateBuffer( cmd, shaderBindingTable, alignment * HIT_SHADER_2,	stride, handles.data() + BytesU{stride * HIT_SHADER_2} );
+		vkCmdUpdateBuffer( cmd, shaderBindingTable, alignment * MISS_SHADER,	stride, handles.data() + BytesU{stride * MISS_SHADER} );
 	});
 	
 	return true;
