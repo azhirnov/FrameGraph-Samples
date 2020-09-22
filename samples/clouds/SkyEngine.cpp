@@ -485,7 +485,7 @@ namespace FG
 */
 	void  SkyEngine::OnKey (StringView key, EKeyAction action)
 	{
-		BaseSceneApp::OnKey( key, action );
+		BaseSample::OnKey( key, action );
 
 		if ( action == EKeyAction::Down )
 		{

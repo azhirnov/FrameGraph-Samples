@@ -8,7 +8,8 @@
 
 #include "scene/Renderer/IRenderTechnique.h"
 #include "scene/SceneManager/ISceneManager.h"
-#include "scene/BaseSceneApp.h"
+#include "BaseSample.h"
+
 
 namespace FG
 {
@@ -17,12 +18,12 @@ namespace FG
 	// Ray Tracing Application
 	//
 
-	class SceneApp final : public BaseSceneApp
+	class SceneApp final : public BaseSample
 	{
 	// variables
 	private:
-		RenderTechniquePtr		_renderTech;
-		SceneManagerPtr			_scene;
+		RenderTechniquePtr			_renderTech;
+		SceneManagerPtr				_scene;
 
 		
 	// methods
@@ -30,23 +31,28 @@ namespace FG
 		SceneApp () {}
 		~SceneApp ();
 
-		bool Initialize ();
+		bool  Initialize ();
 
 
 	// BaseSceneApp
 	private:
-		bool DrawScene () override;
+		bool  DrawScene () override;
 		
 
 	// IWindowEventListener
 	private:
-		void OnKey (StringView, EKeyAction) override;
+		void  OnKey (StringView, EKeyAction) override;
 
 
 	// IViewport //
 	private:
-		void Prepare (ScenePreRender &) override;
-		void Draw (RenderQueue &) const override;
+		void  Prepare (ScenePreRender &) override;
+		void  Draw (RenderQueue &) const override;
+		
+
+	// BaseSample
+	private:
+		void  OnUpdateUI () override;
 
 
 	private:

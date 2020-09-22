@@ -1,4 +1,4 @@
-if (${FG_ENABLE_GLM} AND ${FG_ENABLE_DEVIL})
+if (TARGET "Samples.Utils" AND TARGET "DevIL-lib" AND TARGET "STB-lib" AND TARGET "TinyObj-lib")
 	file( GLOB_RECURSE SOURCES "*.h" "*.cpp" "*.frag" "*.vert" "*.comp" )
 	add_executable( "Samples.Clouds" ${SOURCES} )
 	source_group( TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES} )

@@ -14,10 +14,12 @@ struct AABB
 
 bool    AABB_IsInside (const AABB box, const float3 pos);
 bool    AABB_RayIntersection (const AABB box, const float3 rayPos, const float3 rayDir, out float2 tBeginEnd);
+float3  AABB_ToLocal (const AABB box, const float3 globalPos);
+float3  AABB_ToLocalSNorm (const AABB box, const float3 globalPos);
 
 float3  AABB_Center (const AABB box);
 float3  AABB_Size (const AABB box);
-float3  AABB_GetPointInBox (const AABB box, const float3 interpolation);
+float3  AABB_GetPointInBox (const AABB box, const float3 snormPos);
 
 // for particles
 float3  AABB_Wrap (const AABB box, const float3 pos);
@@ -34,7 +36,7 @@ bool    AABB_Rebound (const AABB box, inout float3 pos, inout float3 vel);
 	AABB_IsInside
 =================================================
 */
-bool AABB_IsInside (const AABB box, const float3 pos)
+bool  AABB_IsInside (const AABB box, const float3 pos)
 {
 	return AllGreaterEqual( pos, box.min ) and AllLessEqual( pos, box.max );
 }
@@ -44,7 +46,7 @@ bool AABB_IsInside (const AABB box, const float3 pos)
 	AABB_Center
 =================================================
 */
-float3 AABB_Center (const AABB box)
+float3  AABB_Center (const AABB box)
 {
 	return (box.min + box.max) * 0.5;
 }
@@ -54,7 +56,7 @@ float3 AABB_Center (const AABB box)
 	AABB_Size
 =================================================
 */
-float3 AABB_Size (const AABB box)
+float3  AABB_Size (const AABB box)
 {
 	return (box.max - box.min);
 }
@@ -62,11 +64,13 @@ float3 AABB_Size (const AABB box)
 /*
 =================================================
 	AABB_GetPointInBox
+----
+	converts AABB local snorm position to global position
 =================================================
 */
-float3 AABB_GetPointInBox (const AABB box, const float3 interpolation)
+float3  AABB_GetPointInBox (const AABB box, const float3 snormPos)
 {
-	return AABB_Center(box) + AABB_Size(box) * interpolation * 0.5;
+	return AABB_Center(box) + AABB_Size(box) * snormPos * 0.5;
 }
 
 /*
@@ -74,7 +78,7 @@ float3 AABB_GetPointInBox (const AABB box, const float3 interpolation)
 	AABB_Wrap
 =================================================
 */
-float3 AABB_Wrap (const AABB box, const float3 pos)
+float3  AABB_Wrap (const AABB box, const float3 pos)
 {
 	return Wrap( pos, box.min, box.max );
 }
@@ -84,7 +88,7 @@ float3 AABB_Wrap (const AABB box, const float3 pos)
 	AABB_Clamp
 =================================================
 */
-float3 AABB_Clamp (const AABB box, const float3 pos)
+float3  AABB_Clamp (const AABB box, const float3 pos)
 {
 	return Clamp( pos, box.min, box.max );
 }
@@ -94,9 +98,9 @@ float3 AABB_Clamp (const AABB box, const float3 pos)
 	AABB_Rebound
 =================================================
 */
-bool AABB_Rebound (const AABB box, inout float3 pos, inout float3 vel)
+bool  AABB_Rebound (const AABB box, inout float3 pos, inout float3 vel)
 {
-	if ( AABB_IsInside( box, pos ) )
+	if ( AABB_IsInside( box, pos ))
 		return false;
 
 	pos = AABB_Clamp( box, pos );
@@ -108,9 +112,12 @@ bool AABB_Rebound (const AABB box, inout float3 pos, inout float3 vel)
 /*
 =================================================
 	AABB_RayIntersection
+----
+	returns 'true' if ray intersects with AABB,
+	in 'tMinMax' returns nearest and farthest ray length to intersection points
 =================================================
 */
-bool  AABB_RayIntersection (const AABB box, const float3 rayPos, const float3 rayDir, out float2 tBeginEnd)
+bool  AABB_RayIntersection (const AABB box, const float3 rayPos, const float3 rayDir, out float2 tMinMax)
 {
 	// from https://gamedev.stackexchange.com/questions/18436/most-efficient-aabb-vs-ray-collision-algorithms
 
@@ -126,6 +133,23 @@ bool  AABB_RayIntersection (const AABB box, const float3 rayPos, const float3 ra
 	if ( tmin > tmax )
 		return false;
 
-	tBeginEnd = float2( tmin, tmax );
+	tMinMax = float2( tmin, tmax );
 	return true;
+}
+
+/*
+=================================================
+	AABB_ToLocal
+----
+	converts global position to AABB local position
+=================================================
+*/
+float3  AABB_ToLocal (const AABB box, const float3 globalPos)
+{
+	return globalPos - AABB_Center( box );
+}
+
+float3  AABB_ToLocalSNorm (const AABB box, const float3 globalPos)
+{
+	return (globalPos - AABB_Center( box )) / (AABB_Size( box ) * 0.5);
 }

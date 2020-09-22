@@ -32,7 +32,7 @@ float3  HSVtoRGB (const float3 hsv)
 	// from http://chilliant.blogspot.ru/2014/04/rgbhsv-in-hlsl-5.html
 	float3 col = float3( Abs( hsv.x * 6.0 - 3.0 ) - 1.0,
 						 2.0 - Abs( hsv.x * 6.0 - 2.0 ),
-						 2.0 - Abs( hsv.x * 6.0 - 4.0 ) );
+						 2.0 - Abs( hsv.x * 6.0 - 4.0 ));
 	return (( Clamp( col, float3(0.0), float3(1.0) ) - 1.0 ) * hsv.y + 1.0 ) * hsv.z;
 }
 

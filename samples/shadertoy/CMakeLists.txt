@@ -1,4 +1,4 @@
-if (${FG_ENABLE_GLM})
+if (TARGET "Samples.Utils" AND TARGET "DevIL-lib")
 	file( GLOB_RECURSE SOURCES "*.h" "*.cpp" "*.glsl" )
 	add_executable( "Samples.Shadertoy" ${SOURCES} )
 	source_group( TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES} )

@@ -36,6 +36,5 @@ int main ()
 	
 	for (; app.Update(); ) {}
 
-	app.Destroy();
 	return 0;
 }

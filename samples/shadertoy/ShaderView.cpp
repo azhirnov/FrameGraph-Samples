@@ -120,7 +120,7 @@ namespace FG
 */
 	void  ShaderView::SetMode (const uint2 &viewSize, EViewMode mode)
 	{
-		CHECK_ERR( All( viewSize > uint2(0) ), void());
+		CHECK_ERRV( All( viewSize > uint2(0) ));
 		
 		if ( Any(_viewSize != viewSize) or (mode != _viewMode) )
 		{
@@ -313,7 +313,7 @@ namespace FG
 
 		DrawVertices	draw_task;
 		draw_task.SetPipeline( ppln );
-		draw_task.AddResources( DescriptorSetID{"0"}, &pass.resources );
+		draw_task.AddResources( DescriptorSetID{"0"}, pass.resources );
 		draw_task.Draw( 3 ).SetTopology( EPrimitive::TriangleStrip );
 
 		// shader debugger
@@ -396,25 +396,30 @@ namespace FG
 		String	samplers;
 		for (auto& ch : shader->_channels)
 		{
-			ImageID		image;
-			EImage		type	= EImage::Tex2D;	// 2D render target by default
+			ImageID			image;
+			ImageDesc		desc;	// 2D render target by default
+			ImageViewDesc	view;
 
 			if ( _LoadImage( cmdBuffer, ch.name, ch.flipY, OUT image ))
 			{
-				type = _frameGraph->GetDescription( image ).imageType;
-				_frameGraph->ReleaseResource( image );
-			}
+				desc = _frameGraph->GetDescription( image );
+				_frameGraph->ReleaseResource( image );	// release reference, image already stored in cache
 
-			if ( type == EImage::Tex2D )
+				view.Validate( desc );
+			}
+			else
+				view.viewType = EImage_2D;
+
+			if ( view.viewType == EImage_2D )
 				samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler2D iChannel" << ToString(ch.index) << ";\n";
 			else
-			if ( type == EImage::Tex3D )
+			if ( view.viewType == EImage_3D )
 				samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler3D iChannel" << ToString(ch.index) << ";\n";
 			else
-			if ( type == EImage::TexCube )
+			if ( view.viewType == EImage_Cube )
 				samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform samplerCube iChannel" << ToString(ch.index) << ";\n";
 			else
-			if ( type == EImage::Unknown )
+			if ( view.viewType == EImage::Unknown )
 			{}
 			else
 				RETURN_ERR( "unsupported imag type" );
@@ -495,11 +500,11 @@ namespace FG
 		{
 			if ( _imageSamples > 1 )
 			{
-				ImageDesc		desc;
-				desc.imageType	= EImage::Tex2DMS;
-				desc.format		= shader->_format.value_or( _imageFormat );
-				desc.usage		= EImageUsage::TransferSrc | EImageUsage::ColorAttachment;
-				desc.samples	= MultiSamples{ _imageSamples };
+				ImageDesc	desc;
+				desc.SetView( EImage_2D );
+				desc.SetFormat( shader->_format.value_or( _imageFormat ));
+				desc.SetUsage( EImageUsage::TransferSrc | EImageUsage::ColorAttachment );
+				desc.SetSamples( _imageSamples );
 				
 				if ( shader->_surfaceSize.has_value() )
 					desc.dimension = uint3( shader->_surfaceSize.value(), 1 );
@@ -517,11 +522,11 @@ namespace FG
 				else
 					pass.viewport = uint2( float2(_viewSize) * shader->_surfaceScale.value_or(1.0f) + 0.5f );
 
-				ImageDesc		desc;
-				desc.imageType	= EImage::Tex2D;
-				desc.dimension	= uint3{ pass.viewport, 1 };
-				desc.format		= shader->_format.value_or( _imageFormat );
-				desc.usage		= EImageUsage::Transfer | EImageUsage::Sampled | EImageUsage::ColorAttachment | EImageUsage::Storage;
+				ImageDesc	desc;
+				desc.SetView( EImage_2D );
+				desc.SetDimension( pass.viewport );
+				desc.SetFormat( shader->_format.value_or( _imageFormat ));
+				desc.SetUsage( EImageUsage::Transfer | EImageUsage::Sampled | EImageUsage::ColorAttachment | EImageUsage::Storage );
 
 				EResourceState	def_state	= is_vr ? EResourceState::TransferSrc : EResourceState::Unknown;
 				const String	name		= String(shader->Name()) << "-RT-" << ToString(Distance( eye_data.passes.data(), &pass ))
@@ -797,25 +802,30 @@ namespace FG
 			String	samplers;
 			for (auto& ch : shader->_channels)
 			{
-				ImageID		image;
-				EImage		type	= EImage::Tex2D;	// 2D render target by default
+				ImageID			image;
+				ImageDesc		desc;	// 2D render target by default
+				ImageViewDesc	view;
 
 				if ( _LoadImage( cmdBuffer, ch.name, ch.flipY, OUT image ))
 				{
-					type = _frameGraph->GetDescription( image ).imageType;
-					_frameGraph->ReleaseResource( image );
-				}
+					desc = _frameGraph->GetDescription( image );
+					_frameGraph->ReleaseResource( image );	// release reference, image already stored in cache
 
-				if ( type == EImage::Tex2D )
+					view.Validate( desc );
+				}
+				else
+					view.viewType = EImage_2D;
+
+				if ( view.viewType == EImage_2D )
 					samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler2D iChannel" << ToString(ch.index) << ";\n";
 				else
-				if ( type == EImage::Tex3D )
+				if ( view.viewType == EImage_3D )
 					samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform sampler3D iChannel" << ToString(ch.index) << ";\n";
 				else
-				if ( type == EImage::TexCube )
+				if ( view.viewType == EImage_Cube )
 					samplers << "layout (binding=" << ToString(ch.index+1) << ") uniform samplerCube iChannel" << ToString(ch.index) << ";\n";
 				else
-				if ( type == EImage::Unknown )
+				if ( view.viewType == EImage::Unknown )
 				{}
 				else
 					RETURN_ERR( "unsupported imag type" );
@@ -989,7 +999,8 @@ namespace FG
 		auto&	level	 = image->GetData()[0][0];
 		String	img_name = fpath.filename().string();
 
-		id = _frameGraph->CreateImage( ImageDesc{ image->GetType(), level.dimension, level.format, EImageUsage::Transfer | EImageUsage::Sampled },
+		id = _frameGraph->CreateImage( ImageDesc{}.SetView( image->GetType() ).SetDimension( level.dimension )
+											.SetFormat( level.format ).SetUsage( EImageUsage::Transfer | EImageUsage::Sampled ),
 										Default, img_name );
 		CHECK_ERR( id );
 
@@ -999,7 +1010,7 @@ namespace FG
 		return true;
 
 	#else
-		FG_UNUSED( cmdBuffer, filename, flipY );
+		Unused( cmdBuffer, filename, flipY );
 		id = Default;
 		return false;
 	#endif
@@ -1032,18 +1043,19 @@ namespace FG
 		auto&	level	 = image->GetData()[0][0];
 		String	img_name = fpath.filename().string();
 
-		id = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, level.dimension, level.format, EImageUsage::Transfer | EImageUsage::Sampled },
+		id = _frameGraph->CreateImage( ImageDesc{}.SetView( EImage_2D ).SetDimension( level.dimension )
+											.SetFormat( level.format ).SetUsage( EImageUsage::Transfer | EImageUsage::Sampled ),
 										Default, img_name );
 		CHECK_ERR( id );
 
 		_currTask = cmdBuffer->AddTask( UpdateImage{}.SetImage( id ).SetData( level.pixels, level.dimension, level.rowPitch, level.slicePitch ).DependsOn( _currTask ));
-		_currTask = cmdBuffer->AddTask( GenerateMipmaps{}.SetImage( id ).SetRange( 0_mipmap, UMax ).DependsOn( _currTask ));
+		_currTask = cmdBuffer->AddTask( GenerateMipmaps{}.SetImage( id ).SetMipmaps( 0, UMax ).DependsOn( _currTask ));
 
 		_imageCache.insert_or_assign( name, _frameGraph->AcquireResource(id) );
 		return true;
 		
 	#else
-		FG_UNUSED( cmdBuffer, filename, flipY );
+		Unused( cmdBuffer, filename, flipY );
 		id = Default;
 		return false;
 	#endif
@@ -1086,12 +1098,13 @@ namespace FG
 		FS::path	fpath	{filename};
 		String		img_name = fpath.filename().string();
 
-		id = _frameGraph->CreateImage( ImageDesc{ EImage::Tex3D, uint3{header[1], header[2], header[3]}, fmt, EImageUsage::Transfer | EImageUsage::Sampled },
+		id = _frameGraph->CreateImage( ImageDesc{}.SetView( EImage_3D ).SetDimension({ header[1], header[2], header[3] })
+											.SetFormat( fmt ).SetUsage( EImageUsage::Transfer | EImageUsage::Sampled ),
 									   Default, img_name );
 		CHECK_ERR( id );
 
 		_currTask = cmdBuffer->AddTask( UpdateImage{}.SetImage( id ).SetData( buf, uint3{header[1], header[2], header[3]} ).DependsOn( _currTask ));
-		_currTask = cmdBuffer->AddTask( GenerateMipmaps{}.SetImage( id ).SetRange( 0_mipmap, UMax ).DependsOn( _currTask ));
+		_currTask = cmdBuffer->AddTask( GenerateMipmaps{}.SetImage( id ).SetMipmaps( 0, UMax ).DependsOn( _currTask ));
 		
 		_imageCache.insert_or_assign( filename, _frameGraph->AcquireResource(id) );
 		return true;
@@ -1105,7 +1118,7 @@ namespace FG
 	bool  ShaderView::_HasImage (StringView filename) const
 	{
 	#ifdef FS_HAS_FILESYSTEM
-		return FS::exists( FS::path{FG_DATA_PATH}.append( filename.begin(), filename.end() ));
+		return FS::exists( FS::path{FG_DATA_PATH}.append(filename) );
 	#else
 		return true;
 	#endif

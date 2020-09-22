@@ -169,7 +169,7 @@ float3  ParticleEmitter_ConeVector (const float pointIndex, const float pointsCo
 		float	size	= float(GetGlobalIndexSize());
 		float	vel		= 0.5;
 
-		particle.position	= AABB_GetPointInBox( g_BoundingBox, float3( 0.1, 0.0, 0.0 ) );
+		particle.position	= AABB_GetPointInBox( g_BoundingBox, float3( 0.1, 0.0, 0.0 ));
 		particle.size		= 8.0;
 		particle.color		= 0xFFFFFFFF;
 		particle.velocity	= ParticleEmitter_ConeVector( index, size, 1.0 ).zxy * -vel;
@@ -234,7 +234,7 @@ float3  ParticleEmitter_ConeVector (const float pointIndex, const float pointsCo
 		float	size	= float(GetGlobalIndexSize());
 		float	vel		= 0.5;
 
-		particle.position	= AABB_GetPointInBox( g_BoundingBox, float3( 0.1, 0.0, 0.0 ) );
+		particle.position	= AABB_GetPointInBox( g_BoundingBox, float3( 0.1, 0.0, 0.0 ));
 		particle.size		= 8.0;
 		particle.color		= 0xFFFFFFFF;
 		particle.velocity	= ParticleEmitter_ConeVector( index, size, 1.0 ) * vel;
@@ -303,7 +303,7 @@ float3  ParticleEmitter_ConeVector (const float pointIndex, const float pointsCo
 		float	size	= float(GetGlobalIndexSize());
 		float	vel		= 0.5;
 
-		particle.position	= AABB_GetPointInBox( g_BoundingBox, float3( 0.1, 0.0, 0.0 ) );
+		particle.position	= AABB_GetPointInBox( g_BoundingBox, float3( 0.1, 0.0, 0.0 ));
 		particle.size		= 8.0;
 		particle.color		= 0xFFFFFFFF;
 		particle.velocity	= ParticleEmitter_ConeVector( index, size, 1.0 ).zxy * -vel;

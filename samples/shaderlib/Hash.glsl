@@ -136,8 +136,8 @@ float ModHash (float2 uv)
 	// from https://www.shadertoy.com/view/Xts3R7
 	// license CC BY-NC-SA 3.0
 
-	uv = Abs( Mod( 10.0 * Fract( (uv + 1.1312) * 31.0 ), uv + 2.0 ) );
-	uv = Abs( Mod( uv.x * Fract( (uv + 1.721711) * 17.0 ), uv ) );
+	uv = Abs( Mod( 10.0 * Fract( (uv + 1.1312) * 31.0 ), uv + 2.0 ));
+	uv = Abs( Mod( uv.x * Fract( (uv + 1.721711) * 17.0 ), uv ));
 	return Fract( 10.0 * (7.0 * uv.y + 31.0 * uv.x) );
 }
 

@@ -1,7 +1,7 @@
 // Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 
 #extension GL_GOOGLE_include_directive : require
-#extension GL_KHR_memory_scope_semantics : require
+//#extension GL_KHR_memory_scope_semantics : require
 #extension GL_EXT_control_flow_attributes : require
 
 layout (local_size_x_id = 0, local_size_y_id = 1, local_size_z = 1) in;
@@ -27,15 +27,18 @@ layout(set=0, binding=1) writeonly restrict uniform image2D  un_OutNormal;
 
 float FBM (in float3 coord)
 {
+	const float3x3 m = float3x3( 0.00,  0.80,  0.60, -0.80,  0.36, -0.48, -0.60, -0.48,  0.64 );
+
 	float	total		= 0.0;
 	float	amplitude	= 1.0;
 	float	freq		= 1.0;
 
 	for (int i = 0; i < 7; ++i)
 	{
-		total 		+= GradientNoise( coord*freq ) * amplitude;
-		freq 		*= 2.5;
-		amplitude 	*= 0.5;
+		total += GradientNoise( coord*freq ) * amplitude;
+		//coord = m * coord;
+		freq *= 2.5;
+		amplitude *= 0.5;
 	}
 	return total;
 }
@@ -45,7 +48,13 @@ float4 GetPosition (const int2 coord)
 {
 	float2	ncoord	= ToSNorm( float2(coord) / float2(pc.faceDim - 1) );
 	float3	pos		= PROJECTION( ncoord, pc.face );
+	
+	//float	height	= SmoothStep( 0.0, 0.1, VoronoiContour( CM_MapToPlane( ncoord, pc.face ), 0.0 )) * 0.1;
 	float	height	= FBM( pos ) * 0.04;
+	//float	height	= VoronoiCircles( pos * 4.25130437 + float3(1.5670132, 8.439027, 5.912548) ) * 0.1;
+	//float	height	= SDF_Sphere( Fract( pos * 4.0 ) - 0.5, 0.25 ) * 0.1;
+	//float	height	= GradientNoise( pos * 4.251 ) * 0.1;
+
 	return float4( pos, height );
 }
 
@@ -70,13 +79,19 @@ void main ()
 	const float3	pos			= pos_h.xyz * (1.0 + pos_h.w);
 	const bool4		is_active	= bool4( greaterThanEqual( local, int2(0) ), lessThan( local, lsize ));
 
-	s_Positions[ gl_LocalInvocationIndex ] = pos;
-	memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsRelease );
+	s_Positions[ GetLocalIndex() ] = pos;
 
+	memoryBarrierShared();
+	barrier();
+	memoryBarrierShared();
+
+	//memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsRelease );
+	//controlBarrier( gl_ScopeWorkgroup, gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsAcquireRelease );
+	//memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsAcquire );
+
+	// calculate smooth normal
 	if ( All( is_active ))
 	{
-		barrier();
-		memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsAcquire );
 
 		const int3		offset	= int3(-1, 0, 1);
 		const float3	v0		= ReadPosition( local + offset.xx );

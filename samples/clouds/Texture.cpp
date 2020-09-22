@@ -48,10 +48,10 @@ namespace FG
 		_dim = uint2{ int2{ width, height }};
 
 		ImageDesc	desc;
-		desc.imageType	= EImage::Tex2D;
-		desc.dimension	= uint3{ _dim, 1 };
-		desc.usage		= EImageUsage::Sampled | EImageUsage::Transfer;
-		desc.format		= _format;
+		desc.SetView( EImage_2D );
+		desc.SetDimension( _dim );
+		desc.SetUsage( EImageUsage::Sampled | EImageUsage::Transfer );
+		desc.SetFormat( _format );
 
 		_image = _fg->CreateImage( desc, Default, path );
 		CHECK_ERR( _image );
@@ -77,10 +77,10 @@ namespace FG
 		_dim = extent;
 		
 		ImageDesc	desc;
-		desc.imageType	= EImage::Tex2D;
-		desc.dimension	= uint3{ _dim, 1 };
-		desc.usage		= EImageUsage::Sampled | EImageUsage::Transfer | EImageUsage::Storage;
-		desc.format		= _format;
+		desc.SetView( EImage_2D );
+		desc.SetDimension( _dim );
+		desc.SetUsage( EImageUsage::Sampled | EImageUsage::Transfer | EImageUsage::Storage );
+		desc.SetFormat( _format );
 
 		_image = _fg->CreateImage( desc );
 		CHECK_ERR( _image );
@@ -98,10 +98,10 @@ namespace FG
 		_dim = extent;
 
 		ImageDesc	desc;
-		desc.imageType	= EImage::Tex2D;
-		desc.dimension	= uint3{ _dim, 1 };
-		desc.usage		= EImageUsage::ColorAttachment | EImageUsage::Sampled;
-		desc.format		= _format;
+		desc.SetView( EImage_2D );
+		desc.SetDimension( _dim );
+		desc.SetUsage( EImageUsage::ColorAttachment | EImageUsage::Sampled );
+		desc.SetFormat( _format );
 
 		_image = _fg->CreateImage( desc );
 		CHECK_ERR( _image );
@@ -118,10 +118,10 @@ namespace FG
 		_format = EPixelFormat::Depth32F;
 
 		ImageDesc	desc;
-		desc.imageType	= EImage::Tex2D;
-		desc.dimension	= uint3{ _dim, 1 };
-		desc.usage		= EImageUsage::DepthStencilAttachment;
-		desc.format		= _format;
+		desc.SetView( EImage_2D );
+		desc.SetDimension( _dim );
+		desc.SetUsage( EImageUsage::DepthStencilAttachment );
+		desc.SetFormat( _format );
 
 		_image = _fg->CreateImage( desc );
 		CHECK_ERR( _image );
@@ -170,10 +170,10 @@ namespace FG
 		CHECK_ERR( not _initialized );
 	
 		ImageDesc	desc;
-		desc.imageType	= EImage::Tex3D;
-		desc.dimension	= _dim;
-		desc.usage		= EImageUsage::Sampled | EImageUsage::Transfer;
-		desc.format		= _format;
+		desc.SetView( EImage_3D );
+		desc.SetDimension( _dim );
+		desc.SetUsage( EImageUsage::Sampled | EImageUsage::Transfer );
+		desc.SetFormat( _format );
 
 		_image = _fg->CreateImage( desc, Default, path );
 		CHECK_ERR( _image );
@@ -209,10 +209,10 @@ namespace FG
 		_dim = extent;
 		
 		ImageDesc	desc;
-		desc.imageType	= EImage::Tex3D;
-		desc.dimension	= _dim;
-		desc.usage		= EImageUsage::Sampled | EImageUsage::Transfer;
-		desc.format		= _format;
+		desc.SetView( EImage_3D );
+		desc.SetDimension( _dim );
+		desc.SetUsage( EImageUsage::Sampled | EImageUsage::Transfer );
+		desc.SetFormat( _format );
 
 		_image = _fg->CreateImage( desc );
 		CHECK_ERR( _image );

@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "BaseSample.h"
 #include "ShaderView.h"
 #include "video/IVideoRecorder.h"
 
@@ -12,13 +13,13 @@ namespace FG
 	// Shadertoy Image Generator
 	//
 
-	class ImageGenerator final : public BaseSceneApp
+	class ImageGenerator final : public BaseSample
 	{
 	// types
 	public:
 		using EViewMode		= ShaderView::EViewMode;
 		using ShaderDescr	= ShaderView::ShaderDescr;
-		using Shader_t		= std::function< void (Ptr<ShaderView> sv) >;
+		using Shader_t		= Function< void (Ptr<ShaderView> sv) >;
 
 		struct Config
 		{
@@ -48,7 +49,6 @@ namespace FG
 		~ImageGenerator ();
 		
 		bool  Initialize (Shader_t shader, StringView imageName);
-		void  Destroy ();
 
 
 	// BaseSceneApp

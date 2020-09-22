@@ -47,7 +47,7 @@ namespace FG
 		
 		DrawIndexed	task;
 		task.SetTopology( EPrimitive::TriangleList );
-		task.AddBuffer( Default, _vertexBuffer );
+		task.AddVertexBuffer( Default, _vertexBuffer );
 		task.SetIndexBuffer( _indexBuffer, 0_b, EIndex::UInt );
 		task.Draw( uint(_indices.size()) );
 		return task;

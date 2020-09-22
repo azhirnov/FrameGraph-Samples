@@ -1,47 +1,66 @@
+// Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 /*
-	Noise functions
+	Noise functions.
+
+	Requires extensions:
+		GL_EXT_control_flow_attributes
 */
 
 #include "Hash.glsl"
 
-struct VoronoiResult2
-{
-	float2	icenter;
-	float2	offset;		// cell center = icenter + offset
-	float	minDist;	// squared distance in range [0..inf]
-};
-
-struct VoronoiResult3
-{
-	float3	icenter;
-	float3	offset;		// cell center = icenter + offset
-	float	minDist;	// squared distance in range [0..inf]
-};
 
 float  GradientNoise (sampler2D rgbaNoise, const float3 pos);															// range [-1..1]
 float  GradientNoise (const float3 pos);																				// range [-1..1]
+
 float  IQNoise (sampler2D rgbaNoise, const float3 pos, float u, float v);												// range [-1..1]
 float  IQNoise (const float3 pos, float u, float v);																	// range [-1..1]
+
 float  ValueNoise (sampler2D greyNoise, const float3 pos);																// range [-1..1]
 float  ValueNoise (const float3 pos);																					// range [-1..1]
+
 float  PerlinNoise (sampler2D rgbaNoise, const float3 pos);																// range [-1..1]
 float  PerlinNoise (const float3 pos);																					// range [-1..1]
 float  PerlinFBM (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);						// range [-1..1]
 float  PerlinFBM2 (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);						// range [-1..1]
 float  PerlinFBM (sampler2D rgbaNoise, in float3 pos, const float lacunarity, const float persistence, const int octaveCount);	// range [-1..1]
 float  PerlinFBM2 (sampler2D rgbaNoise, in float3 pos, const float lacunarity, const float persistence, const int octaveCount);	// range [-1..1]
+
 float3 Turbulence (const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount);	// returns position
 float3 Turbulence2 (const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount);	// returns position
 float3 Turbulence (sampler2D rgbaNoise, const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount);	// returns position
 float3 Turbulence2 (sampler2D rgbaNoise, const float3 pos, const float power, const float lacunarity, const float persistence, const int octaveCount);	// returns position
+
 float  SimplexNoise (sampler2D rgbaNoise, const float3 pos);															// range [-1..1]
 float  SimplexNoise (const float3 pos);																					// range [-1..1]
+
+struct VoronoiResult2
+{
+	float2	icenter;
+	float2	offset;		// ceil center = icenter + offset
+	float	minDist;	// squared distance in range [0..inf]
+};
 VoronoiResult2  Voronoi (const float2 coord, const float2 seedScaleBias);
+
+struct VoronoiResult3
+{
+	float3	icenter;
+	float3	offset;		// ceil center = icenter + offset
+	float	minDist;	// squared distance in range [0..inf]
+};
 VoronoiResult3  Voronoi (const float3 coord, const float2 seedScaleBias);
+
 float  WarleyFBM (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);				// range [0..1]
 float  WarleyFBM2 (in float3 pos, const float lacunarity, const float persistence, const int octaveCount);				// range [0..1]
+
 float  VoronoiContour (const float2 coord, const float2 seedScaleBias);													// range [0..inf]
 float  VoronoiCircles (const float2 coord, const float radiusScale, const float2 seedScaleBias);						// range [0..inf]
+
+float  TilableVoronoiNoise (const float3 pos, const float3 tileSize, const float2 seedScaleBias);						// range [0..inf]
+float  TilableWarleyNoise (const float3 pos, const float3 tileSize, const float2 seedScaleBias);						// range [0..1]
+float  TilableVoronoiFBM (in float3 pos, in float3 tileSize, const float lacunarity, const float persistence, const int octaveCount, const float2 seedScaleBias);	// range [0..inf]
+float  TilableWarleyFBM (in float3 pos, in float3 tileSize, const float lacunarity, const float persistence, const int octaveCount, const float2 seedScaleBias);	// range [0..inf]
+
+float  WaveletNoise (float2 coord, float z, float k);																	// range [0..1]
 //-----------------------------------------------------------------------------
 
 
@@ -695,5 +714,86 @@ float  VoronoiCircles (const float2 coord, const float radiusScale, const float2
 		return 1.0 / (Square( md / mr ) * 16.0) - 0.07;
 
 	return 0.0;
+}
+//-----------------------------------------------------------------------------
+
+
+// range [0..inf]
+float TilableVoronoiNoise (const float3 pos, const float3 tileSize, const float2 seedScaleBias)
+{
+    float3	ipoint	= Floor( pos * tileSize );
+    float3	fpoint	= Fract( pos * tileSize );
+    float	md		= 1.0e+30;
+	
+	[[unroll]] for (int z = -1; z <= 1; ++z)
+	[[unroll]] for (int y = -1; y <= 1; ++y)
+	[[unroll]] for (int x = -1; x <= 1; ++x)
+    {
+        float3	ioffset	= float3(x, y, z);
+        float3	offset	= DHash33( Mod( ipoint + ioffset, tileSize ) * seedScaleBias.x + seedScaleBias.y );
+		float3	vec		= offset + ioffset - fpoint;
+		float	d		= Dot( vec, vec );
+        md = Min( md, d );
+    }
+	return md;
+}
+
+// range [0..1]
+float  TilableWarleyNoise (const float3 pos, const float3 tileSize, const float2 seedScaleBias)
+{
+	return Max( 1.0 - TilableVoronoiNoise( pos, tileSize, seedScaleBias ), 0.0 );
+}
+
+
+// range [0..inf]
+float  TilableVoronoiFBM (in float3 pos, in float3 tileSize, const float lacunarity, const float persistence, const int octaveCount, const float2 seedScaleBias)
+{
+	float	value	= 0.0;
+	float	pers	= persistence;
+	
+	for (int octave = 0; octave < octaveCount; ++octave)
+	{
+		value    += TilableVoronoiNoise( pos, tileSize, seedScaleBias ) * pers;
+		tileSize *= lacunarity;
+		pers     *= persistence;
+	}
+	return value;
+}
+
+// range [0..inf]
+float  TilableWarleyFBM (in float3 pos, in float3 tileSize, const float lacunarity, const float persistence, const int octaveCount, const float2 seedScaleBias)
+{
+	float	value	= 0.0;
+	float	pers	= persistence;
+	
+	for (int octave = 0; octave < octaveCount; ++octave)
+	{
+		value    += TilableWarleyNoise( pos, tileSize, seedScaleBias ) * pers;
+		tileSize *= lacunarity;
+		pers     *= persistence;
+	}
+	return value;
+}
+//-----------------------------------------------------------------------------
+
+
+float  WaveletNoise (float2 coord, float z, float k)
+{
+    // https://www.shadertoy.com/view/wsBfzK
+	// The MIT License
+	// Copyright © 2020 Martijn Steinrucken
+    float d=0.0, s=1.0, m=0.0, a;
+    for(float i=0.; i<4.; i++) {
+        vec2 q = coord * s;
+		vec2 g = fract(floor(q) * vec2(123.34, 233.53));
+    	g += dot(g, g + 23.234);
+		a = fract(g.x * g.y) * 1e3;// +z*(mod(g.x+g.y, 2.)-1.); // add vorticity
+        q = (fract(q) - 0.5) * mat2(cos(a), -sin(a), sin(a), cos(a));
+        d += sin(q.x * 10.0 + z) * smoothstep(0.25, 0.0, dot(q,q)) / s;
+        coord = coord * mat2(0.54, -0.84, 0.84, 0.54) + i;
+        m += 1.0 / s;
+        s *= k;
+    }
+    return d / m;
 }
 //-----------------------------------------------------------------------------

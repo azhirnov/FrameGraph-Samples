@@ -58,12 +58,9 @@ namespace {
 		cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
 
 		CHECK_ERR( _CreateFrameGraph( cfg ));
-
-		_linearSampler = _frameGraph->CreateSampler( SamplerDesc{}.SetAddressMode( EAddressMode::Repeat )
-								.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Linear )).Release();
 		
-		_linearClampSampler = _frameGraph->CreateSampler( SamplerDesc{}.SetAddressMode( EAddressMode::ClampToEdge )
-								.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Linear )).Release();
+		CHECK_ERR( _InitUI() );
+		CHECK_ERR( _CreateSamplers() );
 
 		GetFPSCamera().SetPosition({ 0.0f, 0.0f, 20.0f });
 		_SetupCamera( 60_deg, vec2(0.1f, 200.0f) );
@@ -85,8 +82,8 @@ namespace {
 		// create height map
 		if ( not _planet.heightMap )
 		{
-			_planet.heightMap = _frameGraph->CreateImage( ImageDesc{ EImage::TexCube, uint3{face_size}, EPixelFormat::R16F,
-																	 EImageUsage::Storage | EImageUsage::Transfer | EImageUsage::Sampled, 6_layer },
+			_planet.heightMap = _frameGraph->CreateImage( ImageDesc{}.SetView( EImage_Cube ).SetDimension( face_size ).SetArrayLayers( 6 ).SetFormat( EPixelFormat::R16F )
+																.SetUsage( EImageUsage::Storage | EImageUsage::Transfer | EImageUsage::Sampled ),
 														  Default, "Planet.HeightMap" );
 			CHECK_ERR( _planet.heightMap );
 		}
@@ -94,8 +91,8 @@ namespace {
 		// create normal map
 		if ( not _planet.normalMap )
 		{
-			_planet.normalMap = _frameGraph->CreateImage( ImageDesc{ EImage::TexCube, uint3{face_size}, EPixelFormat::RGBA16F,
-																	 EImageUsage::Storage | EImageUsage::Transfer | EImageUsage::Sampled, 6_layer },
+			_planet.normalMap = _frameGraph->CreateImage( ImageDesc{}.SetView( EImage_Cube ).SetDimension( face_size ).SetArrayLayers( 6 ).SetFormat( EPixelFormat::RGBA16F )
+																.SetUsage( EImageUsage::Storage | EImageUsage::Transfer | EImageUsage::Sampled ),
 														  Default, "Planet.NormalMap" );
 			CHECK_ERR( _planet.normalMap );
 		}
@@ -103,8 +100,8 @@ namespace {
 		// create albedo map
 		if ( not _planet.albedoMap )
 		{
-			_planet.albedoMap = _frameGraph->CreateImage( ImageDesc{ EImage::TexCube, uint3{face_size}, EPixelFormat::RGBA8_UNorm,
-																	 EImageUsage::Storage | EImageUsage::Transfer | EImageUsage::Sampled, 6_layer },
+			_planet.albedoMap = _frameGraph->CreateImage( ImageDesc{}.SetView( EImage_Cube ).SetDimension( face_size ).SetArrayLayers( 6 ).SetFormat( EPixelFormat::RGBA8_UNorm )
+																.SetUsage( EImageUsage::Storage | EImageUsage::Transfer | EImageUsage::Sampled ).SetAllMipmaps(),
 														  Default, "Planet.AlbedoMap" );
 			CHECK_ERR( _planet.albedoMap );
 		}
@@ -112,8 +109,8 @@ namespace {
 		// create material map
 		if ( not _planet.emissionMap )
 		{
-			_planet.emissionMap = _frameGraph->CreateImage( ImageDesc{ EImage::TexCube, uint3{face_size}, EPixelFormat::RG16F,
-																	   EImageUsage::Storage | EImageUsage::Transfer | EImageUsage::Sampled, 6_layer },
+			_planet.emissionMap = _frameGraph->CreateImage( ImageDesc{}.SetView( EImage_Cube ).SetDimension( face_size ).SetArrayLayers( 6 ).SetFormat( EPixelFormat::RG16F )
+																.SetUsage( EImageUsage::Storage | EImageUsage::Transfer | EImageUsage::Sampled ).SetAllMipmaps(),
 														    Default, "Planet.EmissionMap" );
 			CHECK_ERR( _planet.emissionMap );
 		}
@@ -134,7 +131,7 @@ namespace {
 			ppln.AddShader( EShader::Vertex,		 EShaderLangFormat::VKSL_110, "main", "#define SHADER SH_VERTEX\n#define USE_QUADS 1\n"s + shader );
 			ppln.AddShader( EShader::TessControl,	 EShaderLangFormat::VKSL_110, "main", "#define SHADER SH_TESS_CONTROL\n#define USE_QUADS 1\n"s + shader );
 			ppln.AddShader( EShader::TessEvaluation, EShaderLangFormat::VKSL_110, "main", "#define SHADER SH_TESS_EVALUATION\n#define USE_QUADS 1\n"s + shader );
-			ppln.AddShader( EShader::Fragment,		 EShaderLangFormat::VKSL_110, "main", "#define SHADER SH_FRAGMENT\n#define USE_QUADS 1\n"s + shader );
+			ppln.AddShader( EShader::Fragment,		 EShaderLangFormat::VKSL_110 | EShaderLangFormat::EnableTimeMap | EShaderLangFormat::EnableDebugTrace, "main", "#define SHADER SH_FRAGMENT\n#define USE_QUADS 1\n"s + shader );
 
 			GPipelineID	id = _frameGraph->CreatePipeline( ppln );
 			if ( id )
@@ -150,10 +147,10 @@ namespace {
 			CHECK_ERR( _frameGraph->InitPipelineResources( _planet.pipeline, DescriptorSetID{"0"}, OUT _planet.resources ));
 
 			_planet.resources.BindBuffer(  UniformID{"un_PlanetData"},  _planet.ubuffer );
-			_planet.resources.BindTexture( UniformID{"un_HeightMap"},   _planet.heightMap,   _linearSampler );
-			_planet.resources.BindTexture( UniformID{"un_NormalMap"},   _planet.normalMap,   _linearSampler );
-			_planet.resources.BindTexture( UniformID{"un_AlbedoMap"},   _planet.albedoMap,   _linearSampler );
-			_planet.resources.BindTexture( UniformID{"un_EmissionMap"}, _planet.emissionMap, _linearSampler );
+			_planet.resources.BindTexture( UniformID{"un_HeightMap"},   _planet.heightMap,   _sampler.linear );
+			_planet.resources.BindTexture( UniformID{"un_NormalMap"},   _planet.normalMap,   _sampler.linear );
+			_planet.resources.BindTexture( UniformID{"un_AlbedoMap"},   _planet.albedoMap,   _sampler.anisotropy );
+			_planet.resources.BindTexture( UniformID{"un_EmissionMap"}, _planet.emissionMap, _sampler.anisotropy );
 		}
 
 		return true;
@@ -191,7 +188,7 @@ namespace {
 			const uint3		pc_data{ face_size.x, face_size.y, face };
 
 			comp.AddPushConstant( PushConstantID{"PushConst"}, pc_data );
-			comp.AddResources( DescriptorSetID{"0"}, &ppln_res );
+			comp.AddResources( DescriptorSetID{"0"}, ppln_res );
 			comp.SetLocalSize( local_size );
 			comp.Dispatch( group_count );
 			comp.SetPipeline( gen_height_ppln );
@@ -237,7 +234,7 @@ namespace {
 			const uint3		pc_data{ face_size.x, face_size.y, face };
 
 			comp.AddPushConstant( PushConstantID{"PushConst"}, pc_data );
-			comp.AddResources( DescriptorSetID{"0"}, &ppln_res );
+			comp.AddResources( DescriptorSetID{"0"}, ppln_res );
 			comp.SetLocalSize( local_size );
 			comp.Dispatch( group_count );
 			comp.SetPipeline( gen_color_ppln );
@@ -245,24 +242,11 @@ namespace {
 			cmdbuf->AddTask( comp );
 		}
 
+		cmdbuf->AddTask( GenerateMipmaps{}.SetImage( _planet.albedoMap ));
+		cmdbuf->AddTask( GenerateMipmaps{}.SetImage( _planet.emissionMap ));
+
 		_frameGraph->ReleaseResource( gen_color_ppln );
 		return true;
-	}
-
-/*
-=================================================
-	_LoadShader
-=================================================
-*/
-	String  GenPlanetApp::_LoadShader (StringView filename)
-	{
-		FileRStream		file{ String{FG_DATA_PATH} << filename };
-		CHECK_ERR( file.IsOpen() );
-
-		String	str;
-		CHECK_ERR( file.Read( size_t(file.Size()), OUT str ));
-
-		return str;
 	}
 
 /*
@@ -306,7 +290,7 @@ namespace {
 		{
 			CommandBuffer	cmdbuf		= _frameGraph->Begin( CommandBufferDesc{ EQueueType::Graphics });
 			const uint2		sw_dim		= GetSurfaceSize();
-			const uint2		surf_dim	= uint2(float2(sw_dim) * _surfaceScale);
+			const uint2		surf_dim	= _ScaleSurface( sw_dim,  _sufaceScaleIdx );
 			LogicalPassID	pass_id;
 			
 			// resize
@@ -316,11 +300,11 @@ namespace {
 				_frameGraph->ReleaseResource( _colorBuffer );
 				_frameGraph->ReleaseResource( _depthBuffer );
 
-				_colorBuffer = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, uint3{surf_dim}, EPixelFormat::RGBA8_UNorm,
-																	EImageUsage::ColorAttachment | EImageUsage::Sampled | EImageUsage::Transfer | EImageUsage::Storage },
+				_colorBuffer = _frameGraph->CreateImage( ImageDesc{}.SetDimension( surf_dim ).SetFormat( EPixelFormat::RGBA8_UNorm )
+																.SetUsage( EImageUsage::ColorAttachment | EImageUsage::Sampled | EImageUsage::Transfer | EImageUsage::Storage ),
 														 Default, "ColorBuffer" );
-				_depthBuffer = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, uint3{surf_dim}, EPixelFormat::Depth24_Stencil8,
-																	EImageUsage::DepthStencilAttachment | EImageUsage::Sampled },
+				_depthBuffer = _frameGraph->CreateImage( ImageDesc{}.SetDimension( surf_dim ).SetFormat( EPixelFormat::Depth24_Stencil8 )
+																.SetUsage( EImageUsage::DepthStencilAttachment | EImageUsage::Sampled ),
 														 Default, "DepthBuffer" );
 				CHECK( _colorBuffer and _depthBuffer );
 			}
@@ -344,7 +328,7 @@ namespace {
 				CHECK_ERR( pass_id );
 
 				cmdbuf->AddTask( pass_id, _planet.cube.Draw( Lod ).SetPipeline( _planet.pipeline )
-									.AddResources( DescriptorSetID{"0"}, &_planet.resources ));
+									.AddResources( DescriptorSetID{"0"}, _planet.resources ));
 
 				cmdbuf->AddTask( UpdateBuffer{}.SetBuffer( _planet.ubuffer ).AddData( &planet_data, 1, 0_b ));
 				cmdbuf->AddTask( SubmitRenderPass{ pass_id });
@@ -352,7 +336,7 @@ namespace {
 		
 			if ( _showTimemap )
 				cmdbuf->EndShaderTimeMap( _colorBuffer );
-
+			
 			// present
 			{
 				RawImageID	sw_image = cmdbuf->GetSwapchainImage( GetSwapchain() );
@@ -360,6 +344,8 @@ namespace {
 				cmdbuf->AddTask( BlitImage{}.From( _colorBuffer ).To( sw_image ).SetFilter( EFilter::Linear )
 											.AddRegion( {}, int2(0), int2(surf_dim),
 													    {}, int2(0), int2(sw_dim) ));
+
+				_DrawUI( cmdbuf, sw_image );
 			}
 
 			CHECK_ERR( _frameGraph->Execute( cmdbuf ));
@@ -376,16 +362,28 @@ namespace {
 */
 	void  GenPlanetApp::OnKey (StringView key, EKeyAction action)
 	{
-		BaseSceneApp::OnKey( key, action );
+		BaseSample::OnKey( key, action );
 
 		if ( action == EKeyAction::Down )
 		{
 			//if ( key == "right mb" )	_AddDecal( GetMousePos(), 0.1f );
 
 			if ( key == "R" )	_recreatePlanet = true;
-			if ( key == "U" )	_debugPixel = GetMousePos() / vec2(GetSurfaceSize().x, GetSurfaceSize().y);
+			if ( key == "G" )	_debugPixel = GetMousePos() / vec2(GetSurfaceSize().x, GetSurfaceSize().y);
 			if ( key == "T" )	_showTimemap = not _showTimemap;
 		}
+	}
+	
+/*
+=================================================
+	OnUpdateUI
+=================================================
+*/
+	void  GenPlanetApp::OnUpdateUI ()
+	{
+	#ifdef FG_ENABLE_IMGUI
+		ImGui::SliderInt( "Surface scale", INOUT &_sufaceScaleIdx, -2, 1, _SurfaceScaleName( _sufaceScaleIdx ));
+	#endif
 	}
 
 }	// FG

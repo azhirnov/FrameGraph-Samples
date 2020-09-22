@@ -2,9 +2,9 @@
 
 #pragma once
 
+#include "BaseSample.h"
 #include "ShaderView.h"
 #include "video/IVideoRecorder.h"
-#include "ui/ImguiRenderer.h"
 
 namespace FG
 {
@@ -13,17 +13,15 @@ namespace FG
 	// Shadertoy Application
 	//
 
-	class Application final : public BaseSceneApp
+	class Application final : public BaseSample
 	{
 	// types
 	private:
-		using Samples_t		= Array< std::function< void (Ptr<ShaderView> sv) > >;
+		using Samples_t		= Array< Function< void (Ptr<ShaderView> sv) > >;
 
 		using EViewMode		= ShaderView::EViewMode;
 		using ShaderDescr	= ShaderView::ShaderDescr;
 		using Microsec		= std::chrono::microseconds;
-		
-		using KeyStates_t	= StaticArray< EKeyAction, 3 >;
 
 
 	// variables
@@ -50,21 +48,15 @@ namespace FG
 		bool					_showTimemap	= false;
 		bool					_makeScreenshot	= false;
 		bool					_recompile		= false;
-		float					_sufaceScale	= 0.5f;
+		int						_sufaceScaleIdx	= -1;
 		vec4					_sliders		{0.0f};
 
 		UniquePtr<IVideoRecorder>	_videoRecorder;
 		String						_screenshotDir;
-		
-		#ifdef FG_ENABLE_IMGUI
-		ImguiRenderer			_uiRenderer;
-		KeyStates_t				_mouseJustPressed;
-		bool					_settingsWndOpen	= true;
-		#endif
 
-		static inline const Rad			_cameraFov		= 60_deg;
-		static inline const float		_vrSufaceScale	= 1.0f;
-		static constexpr EPixelFormat	_imageFormat	= EPixelFormat::RGBA8_UNorm;
+		static inline const float		_fovStep			= float(0.9_deg);
+		static inline const int			_vrSufaceScaleIdx	= -1;
+		static constexpr EPixelFormat	_imageFormat		= EPixelFormat::RGBA8_UNorm;
 
 
 	// methods
@@ -73,7 +65,6 @@ namespace FG
 		~Application ();
 		
 		bool  Initialize ();
-		void  Destroy ();
 
 
 	// BaseSceneApp
@@ -84,6 +75,11 @@ namespace FG
 	// IWindowEventListener
 	private:
 		void  OnKey (StringView, EKeyAction) override;
+		
+
+	// BaseSample
+	private:
+		void  OnUpdateUI () override;
 
 
 	private:
@@ -92,9 +88,6 @@ namespace FG
 		void  _StartStopRecording ();
 		void  _ResetPosition ();
 		void  _ResetOrientation ();
-		
-		bool  _UpdateUI (const uint2 &dim);
-		bool  _UpdateInput ();
 
 		void  _SaveImage (const ImageView &view);
 	};

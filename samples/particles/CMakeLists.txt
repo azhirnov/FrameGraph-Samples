@@ -1,4 +1,4 @@
-if (${FG_ENABLE_GLM})
+if (TARGET "Samples.Utils")
 	file( GLOB_RECURSE SOURCES "*.h" "*.cpp" "*.glsl" )
 	add_executable( "Samples.Particles" ${SOURCES} )
 	source_group( TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES} )

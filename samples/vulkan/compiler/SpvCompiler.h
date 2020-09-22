@@ -26,13 +26,13 @@ public:
 				  ArrayView<const char *>	source,
 				  StringView				entry,
 				  EShLanguage				shaderType,
-				  glslang::EShTargetLanguageVersion	spvVersion	= glslang::EShTargetSpv_1_3,
+				  glslang::EShTargetLanguageVersion	spvVersion	= glslang::EShTargetSpv_1_0,
 				  bool						autoMapLocations	= true) const;
 
 	bool Compile (OUT Array<uint>&			spirvData,
 				  ArrayView<const char *>	source,
 				  StringView				entry,
 				  EShLanguage				shaderType,
-				  glslang::EShTargetLanguageVersion	spvVersion	= glslang::EShTargetSpv_1_3,
+				  glslang::EShTargetLanguageVersion	spvVersion	= glslang::EShTargetSpv_1_0,
 				  bool						autoMapLocations	= true) const;
 };

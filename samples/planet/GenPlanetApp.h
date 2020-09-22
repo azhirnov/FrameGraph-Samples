@@ -3,7 +3,7 @@
 #pragma once
 
 #include "SphericalCube/SphericalCube.h"
-#include "scene/BaseSceneApp.h"
+#include "BaseSample.h"
 
 namespace FG
 {
@@ -12,7 +12,7 @@ namespace FG
 	// Generated Planet Application
 	//
 
-	class GenPlanetApp final : public BaseSceneApp
+	class GenPlanetApp final : public BaseSample
 	{
 	// types
 	private:
@@ -31,7 +31,6 @@ namespace FG
 			float			radius;
 
 			vec3			lightDirection;
-			float			_padding[1];
 
 			//PlanetMaterial	materials [256];
 		};
@@ -56,14 +55,11 @@ namespace FG
 		struct {
 		}						_atmosphere;
 
-		RawSamplerID			_linearSampler;
-		RawSamplerID			_linearClampSampler;
-
 		bool					_recreatePlanet	= true;
 		bool					_showTimemap	= false;
 		Optional<vec2>			_debugPixel;
-
-		const float				_surfaceScale = 0.5f;
+		
+		int						_sufaceScaleIdx		= 0;
 
 		
 	// methods
@@ -82,6 +78,11 @@ namespace FG
 	// IWindowEventListener
 	private:
 		void  OnKey (StringView, EKeyAction) override;
+		
+
+	// BaseSample
+	private:
+		void  OnUpdateUI () override;
 
 
 	private:
@@ -89,7 +90,7 @@ namespace FG
 		bool  _GenerateHeightMap (const CommandBuffer &);
 		bool  _GenerateColorMap (const CommandBuffer &);
 		
-		ND_ static String  _LoadShader (StringView filename);
+		ND_ static String  _LoadShader (NtStringView filename)	{ return BaseSample::_LoadShader( String{FG_DATA_PATH} + filename.c_str()); }
 	};
 
 }	// FG

@@ -107,7 +107,7 @@ float SDF_Ellipsoid (const float3 position, const float3 radius)
 float SDF_Box (const float3 position, const float3 halfSize)
 {
 	const float3	d = Abs( position ) - halfSize;
-	return Min( Max( d.x, Max( d.y, d.z ) ), 0.0 ) + Length( Max( d, 0.0 ) );
+	return Min( Max( d.x, Max( d.y, d.z )), 0.0 ) + Length( Max( d, 0.0 ));
 }
 
 
@@ -121,9 +121,9 @@ float SDF_Torus (const float3 position, const float2 firstAndSecondRadius)
 
 float SDF_Cylinder (const float3 position, const float2 radiusHeight)
 {
-	const float2	d = Abs( float2( Length( position.xz ), position.y ) ) - radiusHeight;
+	const float2	d = Abs( float2( Length( position.xz ), position.y )) - radiusHeight;
 
-	return Min( Max( d.x, d.y ), 0.0 ) + Length( Max( d, 0.0 ) );
+	return Min( Max( d.x, d.y ), 0.0 ) + Length( Max( d, 0.0 ));
 }
 
 

@@ -2,8 +2,7 @@
 
 #pragma once
 
-#include "scene/BaseSceneApp.h"
-#include "ui/ImguiRenderer.h"
+#include "BaseSample.h"
 
 namespace FG
 {
@@ -12,7 +11,7 @@ namespace FG
 	// Particle Render Application
 	//
 
-	class ParticlesApp final : public BaseSceneApp
+	class ParticlesApp final : public BaseSample
 	{
 	// types
 	private:
@@ -55,19 +54,13 @@ namespace FG
 			Unknown		= None,
 		};
 
-		using KeyStates_t	= StaticArray< EKeyAction, 3 >;
-
 
 	// variables
 	private:
-		ImageID					_colorBuffer1;
-		ImageID					_colorBuffer2;
+		ImageID					_colorBuffer[2];
 		ImageID					_depthBuffer;
 
-		RawSamplerID			_linearSampler;
-		RawSamplerID			_linearClampSampler;
-
-		BufferID				_cameraUB;
+		BufferID				_cameraUB[2];
 		BufferID				_particlesUB;
 		BufferID				_particlesBuf;
 		
@@ -80,31 +73,25 @@ namespace FG
 
 		Optional<vec2>			_debugPixel;
 
-		EBlendMode				_blendMode		= Default;
-		EParticleDrawMode		_particleMode	= Default;
+		EBlendMode				_blendMode			= Default;
+		EParticleDrawMode		_particleMode		= Default;
 		uint					_numParticles;
 		uint					_numSteps;
 
-		uint					_curMode		= 1;
-		uint					_newMode		= 1;
+		uint					_curMode			= 1;
+		uint					_newMode			= 1;
 
 		bool					_initialized;
 		bool					_reloadShaders;
-		bool					_halfSurfaceSize	= true;
-		bool					_settingsWndOpen	= true;
+		int						_sufaceScaleIdx		= 0;
 
-		float					_timeScale		= 0.0f;
+		float					_timeScale			= 0.0f;
 		Nanoseconds				_startTime;
 
 		// config
-		const uint				_maxSteps		= 512;
-		const uint				_maxParticles 	= 1u << 22;
-		const uint				_localSize		= 64;
-		
-		#ifdef FG_ENABLE_IMGUI
-		ImguiRenderer			_uiRenderer;
-		KeyStates_t				_mouseJustPressed;
-		#endif
+		const uint				_maxSteps			= 512;
+		const uint				_maxParticles 		= 1u << 22;
+		const uint				_localSize			= 64;
 
 		
 	// methods
@@ -123,20 +110,22 @@ namespace FG
 	// IWindowEventListener
 	private:
 		void  OnKey (StringView, EKeyAction) override;
+		
+
+	// BaseSample
+	private:
+		void  OnUpdateUI () override;
 
 
 	private:
 		void  _ReloadShaders (const CommandBuffer &cmdbuf);
-		void  _DrawParticles (const CommandBuffer &cmdbuf, RawImageID colorBuffer);
+		void  _DrawParticles (const CommandBuffer &cmdbuf, uint eye);
 		void  _ResetPosition ();
 		void  _ResetOrientation ();
-		
-		bool  _UpdateUI ();
-		bool  _UpdateInput ();
 
 		float _GetTimeStep () const;
 
-		ND_ static String  _LoadShader (StringView filename);
+		ND_ static String  _LoadShader (NtStringView filename)	{ return BaseSample::_LoadShader( String{FG_DATA_PATH} + filename.c_str()); }
 	};
 
 }	// FG

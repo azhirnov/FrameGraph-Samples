@@ -6,19 +6,21 @@
 	https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#primsrast-shading-rate-image
 */
 
-#include "framework/Vulkan/VulkanDeviceExt.h"
+#include "framework/Vulkan/VulkanDevice.h"
 #include "framework/Vulkan/VulkanSwapchain.h"
 #include "framework/Window/WindowGLFW.h"
 #include "framework/Window/WindowSDL2.h"
 #include "compiler/SpvCompiler.h"
 #include "stl/Algorithms/StringUtils.h"
 
+#ifdef VK_NV_shading_rate_image
+
 namespace {
 
 class ShadingRateApp final : public IWindowEventListener, public VulkanDeviceFn
 {
 private:
-	VulkanDeviceExt			vulkan;
+	VulkanDeviceInitializer	vulkan;
 	VulkanSwapchainPtr		swapchain;
 	WindowPtr				window;
 	SpvCompiler				spvCompiler;
@@ -83,7 +85,7 @@ public:
 	bool CreatePipelineFSQ ();
 	bool CreatePipelineGenSRI ();
 
-	ND_ bool IsShadingRateImageSupported () const		{ return vulkan.GetDeviceShadingRateImageFeatures().shadingRateImage; }
+	ND_ bool IsShadingRateImageSupported () const		{ return vulkan.GetProperties().shadingRateImageFeatures.shadingRateImage; }
 };
 
 
@@ -144,17 +146,11 @@ bool ShadingRateApp::Initialize ()
 		CHECK_ERR( window->Create( { 800, 600 }, title ));
 		window->AddListener( this );
 
-		CHECK_ERR( vulkan.Create( window->GetVulkanSurface(),
-								  "sample", "Engine",
-								  VK_API_VERSION_1_1,
-								  "",
-								  {{ VK_QUEUE_PRESENT_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 0.0f }},
-								  VulkanDevice::GetRecomendedInstanceLayers(),
-								  VulkanDevice::GetRecomendedInstanceExtensions(),
-								  { VK_NV_SHADING_RATE_IMAGE_EXTENSION_NAME }
-			));
+		CHECK_ERR( vulkan.CreateInstance( window->GetVulkanSurface(), title, "Engine", vulkan.GetRecomendedInstanceLayers(), {}, {1,0} ));
+		CHECK_ERR( vulkan.ChooseHighPerformanceDevice() );
+		CHECK_ERR( vulkan.CreateLogicalDevice( Default, { VK_NV_SHADING_RATE_IMAGE_EXTENSION_NAME }));
 		
-		vulkan.CreateDebugUtilsCallback( DebugUtilsMessageSeverity_All );
+		vulkan.CreateDebugCallback( DefaultDebugMessageSeverity );
 
 		CHECK_ERR( IsShadingRateImageSupported() );
 	}
@@ -165,7 +161,7 @@ bool ShadingRateApp::Initialize ()
 		VkFormat		color_fmt	= VK_FORMAT_UNDEFINED;
 		VkColorSpaceKHR	color_space	= VK_COLOR_SPACE_MAX_ENUM_KHR;
 
-		swapchain.reset( new VulkanSwapchain{ vulkan } );
+		swapchain.reset( new VulkanSwapchain{ vulkan });
 
 		CHECK_ERR( swapchain->ChooseColorFormat( INOUT color_fmt, INOUT color_space ));
 
@@ -235,8 +231,9 @@ void ShadingRateApp::Destroy ()
 	DestroyFramebuffers();
 	swapchain->Destroy();
 	swapchain.reset();
-
-	vulkan.Destroy();
+	
+	vulkan.DestroyLogicalDevice();
+	vulkan.DestroyInstance();
 
 	window->Destroy();
 	window.reset();
@@ -418,7 +415,7 @@ bool ShadingRateApp::CreateSyncObjects ()
 	sem_info.flags		= 0;
 
 	for (auto& sem : semaphores) {
-		VK_CALL( vkCreateSemaphore( dev, &sem_info, null, OUT &sem ) );
+		VK_CALL( vkCreateSemaphore( dev, &sem_info, null, OUT &sem ));
 	}
 
 	return true;
@@ -535,15 +532,15 @@ void ShadingRateApp::DestroyFramebuffers ()
 */
 bool ShadingRateApp::CreateResources ()
 {
-	VkDeviceSize					total_size		= 0;
-	uint							mem_type_bits	= 0;
-	VkMemoryPropertyFlags			mem_property	= 0;
-	Array<std::function<void ()>>	bind_mem;
-	uint2							sr_image_size;
+	VkDeviceSize				total_size		= 0;
+	uint						mem_type_bits	= 0;
+	VkMemoryPropertyFlags		mem_property	= 0;
+	Array<Function<void ()>>	bind_mem;
+	uint2						sr_image_size;
 
 	// create shading rate image
 	{
-		const auto&		sri_size	= vulkan.GetDeviceShadingRateImageProperties().shadingRateTexelSize;
+		const auto&		sri_size	= vulkan.GetProperties().shadingRateImageProperties.shadingRateTexelSize;
 		const auto&		surf_size	= swapchain->GetSurfaceSize();
 		sr_image_size = { surf_size.x / sri_size.width + 1, surf_size.y / sri_size.height + 1 };
 
@@ -1010,3 +1007,10 @@ extern void ShadingRateImage_Sample1 ()
 		app.Destroy();
 	}
 }
+
+#else
+
+extern void ShadingRateImage_Sample1 ()
+{}
+
+#endif	// VK_NV_shading_rate_image

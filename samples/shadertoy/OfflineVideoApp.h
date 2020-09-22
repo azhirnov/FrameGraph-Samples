@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "BaseSample.h"
 #include "ShaderView.h"
 #include "video/IVideoRecorder.h"
 
@@ -12,13 +13,13 @@ namespace FG
 	// Shadertoy Offline Video Renderer
 	//
 
-	class OfflineVideoApp final : public BaseSceneApp
+	class OfflineVideoApp final : public BaseSample
 	{
 	// types
 	public:
 		using EViewMode		= ShaderView::EViewMode;
 		using ShaderDescr	= ShaderView::ShaderDescr;
-		using Shader_t		= std::function< void (Ptr<ShaderView> sv) >;
+		using Shader_t		= Function< void (Ptr<ShaderView> sv) >;
 
 		struct Config
 		{
@@ -54,7 +55,6 @@ namespace FG
 		~OfflineVideoApp ();
 		
 		bool  Initialize (Shader_t shader, uint maxFrames, StringView videoName);
-		void  Destroy ();
 
 
 	// BaseSceneApp

@@ -6,7 +6,7 @@
 	https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#synchronization-queue-transfers-acquire
 */
 
-#include "framework/Vulkan/VulkanDeviceExt.h"
+#include "framework/Vulkan/VulkanDevice.h"
 #include "framework/Vulkan/VulkanSwapchain.h"
 #include "framework/Window/WindowGLFW.h"
 #include "framework/Window/WindowSDL2.h"
@@ -18,7 +18,7 @@ namespace {
 class AsyncComputeApp final : public IWindowEventListener, public VulkanDeviceFn
 {
 private:
-	VulkanDeviceExt			vulkan;
+	VulkanDeviceInitializer	vulkan;
 	VulkanSwapchainPtr		swapchain;
 	WindowPtr				window;
 	SpvCompiler				spvCompiler;
@@ -150,24 +150,17 @@ bool AsyncComputeApp::Initialize ()
 
 		CHECK_ERR( window->Create( { 800, 600 }, title ));
 		window->AddListener( this );
-
-		CHECK_ERR( vulkan.Create( window->GetVulkanSurface(),
-								  title, "Engine",
-								  VK_API_VERSION_1_1,
-								  "",
-								  {{ VK_QUEUE_PRESENT_BIT | VK_QUEUE_GRAPHICS_BIT, 0.0f },
-								   { VK_QUEUE_COMPUTE_BIT, 0.0f }},
-								  VulkanDevice::GetRecomendedInstanceLayers(),
-								  VulkanDevice::GetRecomendedInstanceExtensions(),
-								  {}
-			));
-
+		
+		CHECK_ERR( vulkan.CreateInstance( window->GetVulkanSurface(), title, "Engine", vulkan.GetRecomendedInstanceLayers(), {}, {1,0} ));
+		CHECK_ERR( vulkan.ChooseHighPerformanceDevice() );
+		CHECK_ERR( vulkan.CreateLogicalDevice( {{VK_QUEUE_GRAPHICS_BIT}, {VK_QUEUE_COMPUTE_BIT}}, Default ));
+		
 		CHECK_ERR( vulkan.GetVkQueues().size() == 2 );
 		CHECK_ERR( vulkan.GetVkQueues()[0].familyIndex != vulkan.GetVkQueues()[1].familyIndex );
 		
-		presentInComputeQueueSupported = EnumEq( vulkan.GetVkQueues()[1].flags, VK_QUEUE_PRESENT_BIT );
+		presentInComputeQueueSupported = vulkan.GetVkQueues()[1].supportsPresent;
 		
-		vulkan.CreateDebugUtilsCallback( DebugUtilsMessageSeverity_All );
+		vulkan.CreateDebugCallback( DefaultDebugMessageSeverity );
 	}
 
 
@@ -176,7 +169,7 @@ bool AsyncComputeApp::Initialize ()
 		VkFormat		color_fmt	= VK_FORMAT_UNDEFINED;
 		VkColorSpaceKHR	color_space	= VK_COLOR_SPACE_MAX_ENUM_KHR;
 
-		swapchain.reset( new VulkanSwapchain{ vulkan } );
+		swapchain.reset( new VulkanSwapchain{ vulkan });
 
 		CHECK_ERR( swapchain->ChooseColorFormat( INOUT color_fmt, INOUT color_space ));
 
@@ -258,8 +251,9 @@ void AsyncComputeApp::Destroy ()
 
 	swapchain->Destroy();
 	swapchain.reset();
-
-	vulkan.Destroy();
+	
+	vulkan.DestroyLogicalDevice();
+	vulkan.DestroyInstance();
 
 	window->Destroy();
 	window.reset();
@@ -683,7 +677,7 @@ bool AsyncComputeApp::CreateSyncObjects ()
 	sem_info.flags		= 0;
 
 	for (auto& sem : semaphores) {
-		VK_CALL( vkCreateSemaphore( dev, &sem_info, null, OUT &sem ) );
+		VK_CALL( vkCreateSemaphore( dev, &sem_info, null, OUT &sem ));
 	}
 
 	return true;
@@ -791,11 +785,11 @@ bool AsyncComputeApp::CreateSampler ()
 */
 bool AsyncComputeApp::CreateResources ()
 {
-	VkDeviceSize					total_size		= 0;
-	uint							mem_type_bits	= 0;
-	VkMemoryPropertyFlags			mem_property	= 0;
-	Array<std::function<void ()>>	bind_mem;
-	const uint2						image_size		= renderTargetSize;
+	VkDeviceSize				total_size		= 0;
+	uint						mem_type_bits	= 0;
+	VkMemoryPropertyFlags		mem_property	= 0;
+	Array<Function<void ()>>	bind_mem;
+	const uint2					image_size		= renderTargetSize;
 
 
 	// create texture

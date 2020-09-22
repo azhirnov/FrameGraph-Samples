@@ -147,6 +147,14 @@ bool4 Equals (const double4 lhs, const double4 rhs)  { return equal( lhs, rhs );
 #define NotAllEqual( a, b )		!All( Equals( (a), (b) ))
 #define NotAnyEqual( a, b )		!Any( Equals( (a), (b) ))
 
+#define All2( a, b )			All(bool2( (a), (b) ))
+#define All3( a, b, c )			All(bool3( (a), (b), (c) ))
+#define All4( a, b, c, d )		All(bool4( (a), (b), (c), (d) ))
+
+#define Any2( a, b )			Any(bool2( (a), (b) ))
+#define Any3( a, b, c )			Any(bool3( (a), (b), (c) ))
+#define Any4( a, b, c, d )		Any(bool4( (a), (b), (c), (d) ))
+
 #define Min3( a, b, c )			Min( Min( (a), (b) ), (c) )
 #define Min4( a, b, c, d )		Min( Min( (a), (b) ), Min( (c), (d) ))
 #define Max3( a, b, c )			Max( Max( (a), (b) ), (c) )

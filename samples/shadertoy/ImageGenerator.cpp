@@ -23,7 +23,14 @@ namespace FG
 =================================================
 */
 	ImageGenerator::~ImageGenerator ()
-	{}
+	{
+		_view.reset();
+
+		if ( _frameGraph )
+		{
+			_frameGraph->ReleaseResource( _image );
+		}
+	}
 
 /*
 =================================================
@@ -56,10 +63,10 @@ namespace FG
 
 		{
 			ImageDesc	desc;
-			desc.imageType	= _config.imageSize.z > 1 ? EImage::Tex3D : EImage::Tex2D;
-			desc.dimension	= _config.imageSize;
-			desc.format		= _config.imageFormat;
-			desc.usage		= EImageUsage::Transfer | EImageUsage::Sampled;
+			desc.SetView( _config.imageSize.z > 1 ? EImage_3D : EImage_2D );
+			desc.SetDimension( _config.imageSize );
+			desc.SetFormat( _config.imageFormat );
+			desc.SetUsage( EImageUsage::Transfer | EImageUsage::Sampled );
 
 			_image = _frameGraph->CreateImage( desc, Default, "ResultImage" );
 			CHECK_ERR( _image );
@@ -138,20 +145,6 @@ namespace FG
 		_SetLastCommandBuffer( cmdbuf );
 		return true;
 	}
-
-/*
-=================================================
-	Destroy
-=================================================
-*/
-	void  ImageGenerator::Destroy ()
-	{
-		_view.reset();
-
-		_frameGraph->ReleaseResource( _image );
-
-		_DestroyFrameGraph();
-	}
 	
 /*
 =================================================
@@ -171,7 +164,7 @@ namespace FG
 
 			auto&			level	= mips[0][0];
 			ImageDesc		desc	= _frameGraph->GetDescription( _image );
-			IntermImagePtr	interm	= MakeShared<IntermImage>( std::move(mips), desc.imageType, _imageName );
+			IntermImagePtr	interm	= MakeShared<IntermImage>( std::move(mips), EImage_2D, _imageName );
 
 			level.dimension		= desc.dimension;
 			level.format		= desc.format;
@@ -184,7 +177,7 @@ namespace FG
 			}
 
 			DDSSaver	saver;
-			CHECK_ERR( saver.SaveImage( _imageName, interm ), void());
+			CHECK_ERRV( saver.SaveImage( _imageName, interm ));
 
 			FG_LOGI( "Image saved to '"s << _imageName << "'" );
 			

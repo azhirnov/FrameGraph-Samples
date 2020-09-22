@@ -1,6 +1,6 @@
 // Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 
-#include "framework/Vulkan/VulkanDeviceExt.h"
+#include "framework/Vulkan/VulkanDevice.h"
 #include "framework/Vulkan/VulkanSwapchain.h"
 #include "framework/Window/WindowGLFW.h"
 #include "framework/Window/WindowSDL2.h"
@@ -12,7 +12,7 @@ namespace {
 class CacheTestApp final : public IWindowEventListener, public VulkanDeviceFn
 {
 private:
-	VulkanDeviceExt			vulkan;
+	VulkanDeviceInitializer	vulkan;
 	VulkanSwapchainPtr		swapchain;
 	WindowPtr				window;
 	SpvCompiler				spvCompiler;
@@ -129,20 +129,16 @@ bool CacheTestApp::Initialize ()
 
 	// create window and vulkan device
 	{
-		CHECK_ERR( window->Create( { 800, 600 }, "Cache invalidation test" ));
-		window->AddListener( this );
+		const char	title[] = "Cache invalidation test";
 
-		CHECK_ERR( vulkan.Create( window->GetVulkanSurface(),
-								  "Cache invalidation test", "Engine",
-								  VK_API_VERSION_1_1,
-								  "",
-								  {{ VK_QUEUE_PRESENT_BIT | VK_QUEUE_GRAPHICS_BIT, 0.0f }},
-								  VulkanDevice::GetRecomendedInstanceLayers(),
-								  VulkanDevice::GetRecomendedInstanceExtensions(),
-								  {}
-			));
+		CHECK_ERR( window->Create( { 800, 600 }, title ));
+		window->AddListener( this );
 		
-		vulkan.CreateDebugUtilsCallback( DebugUtilsMessageSeverity_All );
+		CHECK_ERR( vulkan.CreateInstance( window->GetVulkanSurface(), title, "Engine", vulkan.GetRecomendedInstanceLayers(), {}, {1,0} ));
+		CHECK_ERR( vulkan.ChooseHighPerformanceDevice() );
+		CHECK_ERR( vulkan.CreateLogicalDevice( Default, Default ));
+		
+		vulkan.CreateDebugCallback( DefaultDebugMessageSeverity );
 	}
 
 
@@ -151,7 +147,7 @@ bool CacheTestApp::Initialize ()
 		VkFormat		color_fmt	= VK_FORMAT_UNDEFINED;
 		VkColorSpaceKHR	color_space	= VK_COLOR_SPACE_MAX_ENUM_KHR;
 
-		swapchain.reset( new VulkanSwapchain{ vulkan } );
+		swapchain.reset( new VulkanSwapchain{ vulkan });
 
 		CHECK_ERR( swapchain->ChooseColorFormat( INOUT color_fmt, INOUT color_space ));
 
@@ -216,8 +212,9 @@ void CacheTestApp::Destroy ()
 
 	swapchain->Destroy();
 	swapchain.reset();
-
-	vulkan.Destroy();
+	
+	vulkan.DestroyLogicalDevice();
+	vulkan.DestroyInstance();
 
 	window->Destroy();
 	window.reset();
@@ -489,7 +486,7 @@ bool CacheTestApp::CreateSyncObjects ()
 	sem_info.flags		= 0;
 
 	for (auto& sem : semaphores) {
-		VK_CALL( vkCreateSemaphore( dev, &sem_info, null, OUT &sem ) );
+		VK_CALL( vkCreateSemaphore( dev, &sem_info, null, OUT &sem ));
 	}
 
 	return true;
@@ -502,10 +499,10 @@ bool CacheTestApp::CreateSyncObjects ()
 */
 bool CacheTestApp::CreateResources ()
 {
-	VkDeviceSize					total_size		= 0;
-	uint							mem_type_bits	= 0;
-	VkMemoryPropertyFlags			mem_property	= 0;
-	Array<std::function<void ()>>	bind_mem;
+	VkDeviceSize				total_size		= 0;
+	uint						mem_type_bits	= 0;
+	VkMemoryPropertyFlags		mem_property	= 0;
+	Array<Function<void ()>>	bind_mem;
 
 	// create uniform/storage buffer
 	{

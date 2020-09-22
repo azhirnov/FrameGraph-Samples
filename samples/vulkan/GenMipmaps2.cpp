@@ -1,78 +1,12 @@
 // Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 /*
-	references:
-	https://gpuopen.com/optimize-engine-using-compute-4c-prague-2018/
-	http://developer.download.nvidia.com/compute/cuda/1_1/Website/projects/reduction/doc/reduction.pdf
-	https://gpuopen.com/fidelityfx-spd/
-
-	docs:
-	https://github.com/KhronosGroup/GLSL/blob/master/extensions/khr/GL_KHR_memory_scope_semantics.txt
-	https://github.com/KhronosGroup/GLSL/blob/master/extensions/khr/GL_KHR_shader_subgroup.txt
-
-	delta color compression (DCC):
-	https://gpuopen.com/dcc-overview/
-	https://github.com/philiptaylor/vulkan-sync/blob/master/memory.md#framebuffer-compression
-
-	Results with genInComputeShader = true (without DCC)
-
-	Nvidia RTX 2080
-		mipmap generation using compute shader:     0.55 ms
-		mipmap generation using render pass:        0.22 ms
-		mipmap generation using image blit:         0.24 ms
-		mipmap generation using optimal image blit: 0.23 ms
-		
-	Nvidia GTX 1070
-		mipmap generation using compute shader:     0.91 ms
-		mipmap generation using render pass:        0.38 ms
-		mipmap generation using image blit:         0.38 ms
-		mipmap generation using optimal image blit: 0.39 ms
-		
-		sparse memory:
-		mipmap generation using compute shader:     0.91 ms
-		mipmap generation using render pass:        0.38 ms
-
-	AMD RX 570
-		mipmap generation using compute shader:     0.13 ms
-		mipmap generation using render pass:        27.14 us
-		mipmap generation using image blit:         27.67 us
-		mipmap generation using optimal image blit: 27.71 us
-		
-	Intel UHD 630
-		mipmap generation using compute shader:     0.17 ms
-		mipmap generation using render pass:        70.01 us
-		mipmap generation using image blit:         90.37 us
-		mipmap generation using optimal image blit: 48.35 us
-	-----------------------------------------------------------------
+	genInComputeShader = true;
+	mipmap generation using compute shader: 0.91 ms
+	mipmap generation using render pass: 0.38 ms
 	
-	Results with genInComputeShader = false (with DCC)
-	
-	Nvidia RTX 2080
-		mipmap generation using compute shader:     0.54 ms
-		mipmap generation using render pass:        96.26 us
-		mipmap generation using image blit:         0.12 ms
-		mipmap generation using optimal image blit: 0.12 ms
-		
-	Nvidia GTX 1070
-		mipmap generation using compute shader:     0.83 ms
-		mipmap generation using render pass:        0.12 ms
-		mipmap generation using image blit:         0.14 ms
-		mipmap generation using optimal image blit: 0.15 ms
-		
-		sparse memory:
-		mipmap generation using compute shader:     0.83 ms
-		mipmap generation using render pass:        0.11 ms
+	mipmap generation using compute shader: 0.83 ms
+	mipmap generation using render pass: 0.11 ms
 
-	AMD RX 570
-		mipmap generation using compute shader:     0.13 ms
-		mipmap generation using render pass:        27.06 us
-		mipmap generation using image blit:         27.69 us
-		mipmap generation using optimal image blit: 27.65 us
-		
-	Intel UHD 630
-		mipmap generation using compute shader:     0.27 ms
-		mipmap generation using render pass:        55.34 us
-		mipmap generation using image blit:         0.15 ms
-		mipmap generation using optimal image blit: 69.29 us
 */
 
 #include "framework/Vulkan/VulkanDevice.h"
@@ -92,7 +26,7 @@ class GenMipmapsApp final : public IWindowEventListener, public VulkanDeviceFn
 	
 	static constexpr uint2	imageSize	= uint2{ 1u << 12 };
 	static constexpr uint	numMipmaps	= CT_IntLog2< Max( imageSize.x, imageSize.y )>;
-	static constexpr bool	genInComputeShader = true;
+	static constexpr bool	genInComputeShader = false;
 
 private:
 	VulkanDeviceInitializer	vulkan;
@@ -290,14 +224,14 @@ bool GenMipmapsApp::Initialize ()
 
 	// create window and vulkan device
 	{
-		const char	title[] = "Mipmap generation sample";
+		const char	title[] = "Mipmap generation sample 2";
 
 		CHECK_ERR( window->Create( { 800, 600 }, title ));
 		window->AddListener( this );
 		
-		CHECK_ERR( vulkan.CreateInstance( window->GetVulkanSurface(), title, "Engine", {}, {}, {1,0} ));
+		CHECK_ERR( vulkan.CreateInstance( window->GetVulkanSurface(), title, "Engine", {}, {}, {1,1} ));
 		CHECK_ERR( vulkan.ChooseHighPerformanceDevice() );
-		CHECK_ERR( vulkan.CreateLogicalDevice( Default, Default ));
+		CHECK_ERR( vulkan.CreateLogicalDevice( {{VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_SPARSE_BINDING_BIT}}, Default ));
 
 		shaderSubgroupSupported = AllBits( vulkan.GetProperties().subgroup.supportedStages, VK_SHADER_STAGE_COMPUTE_BIT );
 
@@ -1215,13 +1149,49 @@ bool GenMipmapsApp::CreateSampler ()
 */
 bool GenMipmapsApp::CreateImage ()
 {
-	VkMemoryRequirements	mem_req;
+	VkMemoryRequirements					mem_req;
+	Array<VkSparseImageMemoryRequirements>	sparse_req;
+	const VkImageUsageFlags					image_usage		= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
+															  VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	const bool								is_sparse		= true;
+	uint2									tile_size;
+
+	// find supported format
+	{
+		VkPhysicalDeviceSparseImageFormatInfo2	fmt_info = {};
+		fmt_info.sType		= VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2;
+		fmt_info.format		= imageFormat;
+		fmt_info.type		= VK_IMAGE_TYPE_2D;
+		fmt_info.samples	= VK_SAMPLE_COUNT_1_BIT;
+		fmt_info.usage		= image_usage;
+		fmt_info.tiling		= VK_IMAGE_TILING_OPTIMAL;
+
+		uint	count = 0;
+		vkGetPhysicalDeviceSparseImageFormatProperties2( vulkan.GetVkPhysicalDevice(), &fmt_info, OUT &count, null );
+		CHECK_ERR( count > 0 );
+
+		Array<VkSparseImageFormatProperties2>	fmt_properties{ count };
+		for (auto& prop : fmt_properties) {
+			prop.sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2;
+			prop.pNext = null;
+		}
+		vkGetPhysicalDeviceSparseImageFormatProperties2( vulkan.GetVkPhysicalDevice(), &fmt_info, OUT &count, fmt_properties.data() );
+
+		for (auto& prop : fmt_properties) {
+			if ( prop.properties.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT ) {
+				tile_size.x = prop.properties.imageGranularity.width;
+				tile_size.y = prop.properties.imageGranularity.height;
+				break;
+			}
+		}
+		CHECK_ERR(All( tile_size > 0 ));
+	}
 
 	// create image
 	{
 		VkImageCreateInfo	info = {};
 		info.sType			= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		info.flags			= 0;
+		info.flags			= is_sparse ? VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT : 0;
 		info.imageType		= VK_IMAGE_TYPE_2D;
 		info.format			= imageFormat;
 		info.extent			= { imageSize.x, imageSize.y, 1 };
@@ -1229,14 +1199,25 @@ bool GenMipmapsApp::CreateImage ()
 		info.arrayLayers	= 1;
 		info.samples		= VK_SAMPLE_COUNT_1_BIT;
 		info.tiling			= VK_IMAGE_TILING_OPTIMAL;
-		info.usage			= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
-							  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+		info.usage			= image_usage;
 		info.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
 		info.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;
 
 		VK_CHECK( vkCreateImage( vulkan.GetVkDevice(), &info, null, OUT &image ));
 		
 		vkGetImageMemoryRequirements( vulkan.GetVkDevice(), image, OUT &mem_req );
+
+		if ( is_sparse )
+		{
+			mem_req.size = mem_req.size * 3 / 2;
+
+			uint	count = 0;
+			vkGetImageSparseMemoryRequirements( vulkan.GetVkDevice(), image, OUT &count, null );
+			CHECK_ERR( count > 0 );
+
+			sparse_req.resize( count );
+			vkGetImageSparseMemoryRequirements( vulkan.GetVkDevice(), image, OUT &count, OUT sparse_req.data() );
+		}
 	}
 
 	// allocate memory
@@ -1248,10 +1229,56 @@ bool GenMipmapsApp::CreateImage ()
 		CHECK_ERR( vulkan.GetMemoryTypeIndex( mem_req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, OUT info.memoryTypeIndex ));
 
 		VK_CHECK( vkAllocateMemory( vulkan.GetVkDevice(), &info, null, OUT &sharedMemory ));
-	}
 
-	// bind resources
-	VK_CALL( vkBindImageMemory( vulkan.GetVkDevice(), image, sharedMemory, 0 ));
+		if ( not is_sparse )
+			VK_CHECK( vkBindImageMemory( vulkan.GetVkDevice(), image, sharedMemory, 0 ));
+	}
+	
+	// bind sparse memory to image
+	if ( is_sparse )
+	{
+		Array<VkSparseImageMemoryBind>	image_blocks;
+		VkDeviceSize					mem_offset = 0;
+
+		for (uint i = 0; i < uint(CountOf(mipmapViews)); ++i)
+		{
+			VkSparseImageMemoryBind		img_bind = {};
+			img_bind.subresource		= { VK_IMAGE_ASPECT_COLOR_BIT, i, 0 };
+			img_bind.offset				= { 0, 0, 0 };
+			img_bind.extent				= { imageSize.x >> i, imageSize.y >> i, 1 };
+			img_bind.memory				= sharedMemory;
+			img_bind.memoryOffset		= mem_offset;
+
+			//CHECK( img_bind.extent.width  % tile_size.x == 0 );
+			//CHECK( img_bind.extent.height % tile_size.y == 0 );
+				
+			ASSERT( img_bind.memoryOffset % mem_req.alignment == 0 );
+			image_blocks.push_back( img_bind );
+
+			mem_offset = AlignToLarger( mem_offset + (img_bind.extent.width * img_bind.extent.height * 4), mem_req.alignment );
+		}
+		CHECK( mem_offset <= mem_req.size );
+
+		VkSparseImageMemoryBindInfo		img_info = {};
+		img_info.image			= image;
+		img_info.bindCount		= uint(image_blocks.size());
+		img_info.pBinds			= image_blocks.data();
+
+		VkBindSparseInfo		binding = {};
+		binding.sType			= VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
+		binding.imageBindCount	= 1;
+		binding.pImageBinds		= &img_info;
+
+		using TimePoint_t = std::chrono::high_resolution_clock::time_point;
+		TimePoint_t	start = TimePoint_t::clock::now();
+
+		VK_CALL( vkQueueBindSparse( cmdQueue, 1, &binding, VK_NULL_HANDLE ));
+
+		TimePoint_t	end = TimePoint_t::clock::now();
+		FG_LOGI( "Bind sparse: "s << ToString( end - start ) );
+
+		VK_CALL( vkQueueWaitIdle( cmdQueue ));
+	}
 	
 	// create image view for mipmaps
 	for (size_t i = 0; i < CountOf(mipmapViews); ++i)
@@ -2193,10 +2220,10 @@ void main()
 
 /*
 =================================================
-	GenMipmpas_Sample1
+	GenMipmpas_Sample2
 =================================================
 */
-extern void GenMipmpas_Sample1 ()
+extern void GenMipmpas_Sample2 ()
 {
 	GenMipmapsApp	app;
 	

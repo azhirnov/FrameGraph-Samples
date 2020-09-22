@@ -12,10 +12,6 @@
 #include "scene/Loader/DDS/DDSSaver.h"
 #include "scene/Loader/Intermediate/IntermImage.h"
 
-#ifdef FG_ENABLE_IMGUI
-#	include "imgui_internal.h"
-#endif
-
 namespace FG
 {
 /*
@@ -68,15 +64,15 @@ namespace FG
 		_samples.push_back( Shaders::ShadertoyVR::Skyline );
 		_samples.push_back( Shaders::ShadertoyVR::Xyptonjtroz );
 
-		_samples.push_back( Shaders::My::ConvexShape2D );
+		//_samples.push_back( Shaders::My::ConvexShape2D );
 		_samples.push_back( Shaders::My::OptimizedSDF );
-		_samples.push_back( Shaders::My::PrecalculatedRays );
+		//_samples.push_back( Shaders::My::PrecalculatedRays );
 		_samples.push_back( Shaders::My::VoronoiRecursion );
 		_samples.push_back( Shaders::My::ThousandsOfStars );
 
 		//_samples.push_back( Shaders::MyVR::ConvexShape3D );
-		_samples.push_back( Shaders::MyVR::Building_1 );
-		_samples.push_back( Shaders::MyVR::Building_2 );
+		//_samples.push_back( Shaders::MyVR::Building_1 );
+		//_samples.push_back( Shaders::MyVR::Building_2 );
 	}
 
 /*
@@ -95,7 +91,13 @@ namespace FG
 */
 	Application::~Application ()
 	{
-		Destroy();
+		_view.reset();
+
+		if ( _videoRecorder )
+		{
+			CHECK( _videoRecorder->End() );
+			_videoRecorder.reset();
+		}
 	}
 
 /*
@@ -116,17 +118,7 @@ namespace FG
 			CHECK_ERR( _CreateFrameGraph( cfg ));
 		}
 		
-		// initialize imgui and renderer
-		#ifdef FG_ENABLE_IMGUI
-		{
-			IMGUI_CHECKVERSION();
-			ImGui::CreateContext();
-			ImGui::StyleColorsDark();
-
-			CHECK_ERR( _uiRenderer.Initialize( _frameGraph, GImGui ));
-			_mouseJustPressed.fill( EKeyAction::Up );
-		}
-		#endif
+		CHECK_ERR( _InitUI() );
 
 		_screenshotDir = FG_DATA_PATH "screenshots";
 
@@ -135,15 +127,15 @@ namespace FG
 		_InitSamples();
 		
 		_viewMode	= EViewMode::Mono;
-		_targetSize	= uint2(float2(GetSurfaceSize()) * _sufaceScale + 0.5f);
+		_targetSize	= _ScaleSurface( GetSurfaceSize(), _sufaceScaleIdx );
 
 		_ResetPosition();
-		GetFPSCamera().SetPerspective( _cameraFov, 1.0f, 0.1f, 100.0f );
-		//GetVRCamera().SetHmdOffsetScale( 0.1f );
+		_ResetOrientation();
+		_SetupCamera( 60_deg, { 0.1f, 100.0f });
 
 		_view->SetMode( _targetSize, _viewMode );
 		_view->SetCamera( GetFPSCamera() );
-		_view->SetFov( _cameraFov );
+		_view->SetFov( GetCameraFov() );
 		_view->SetImageFormat( _imageFormat );
 
 		return true;
@@ -156,7 +148,7 @@ namespace FG
 */
 	void  Application::OnKey (StringView key, EKeyAction action)
 	{
-		BaseSceneApp::OnKey( key, action );
+		BaseSample::OnKey( key, action );
 
 		if ( action == EKeyAction::Down )
 		{
@@ -172,7 +164,6 @@ namespace FG
 
 			if ( key == "M" )		_vrMirror = not _vrMirror;
 			if ( key == "I" )		_makeScreenshot = true;
-			if ( key == "Y" )		_settingsWndOpen = not _settingsWndOpen;
 
 			// profiling
 			if ( key == "G" )		_view->RecordShaderTrace( GetMousePos() / vec2{GetSurfaceSize().x, GetSurfaceSize().y} );
@@ -182,16 +173,10 @@ namespace FG
 
 		if ( action == EKeyAction::Up )
 		{
-			if ( key == "U" )		_StartStopRecording();
+			if ( key == "Y" )		_StartStopRecording();
 		}
-		
-	#ifdef FG_ENABLE_IMGUI
-		if ( key == "left mb" )		_mouseJustPressed[0] = action;
-		if ( key == "right mb" )	_mouseJustPressed[1] = action;
-		if ( key == "middle mb" )	_mouseJustPressed[2] = action;
-	#endif
 	}
-		
+
 /*
 =================================================
 	DrawScene
@@ -214,6 +199,9 @@ namespace FG
 			_currSample = _nextSample;
 
 			_frameCounter = 0;
+			_ResetPosition();
+			_ResetOrientation();
+
 			_view->ResetShaders();
 			_samples[_currSample]( _view.get() );
 		}
@@ -225,7 +213,7 @@ namespace FG
 			if ( IsActiveVR() )
 			{
 				_viewMode	= EViewMode::HMD_VR;
-				_targetSize	= uint2(float2(GetVRDevice()->GetRenderTargetDimension()) * _vrSufaceScale + 0.5f);
+				_targetSize	= _ScaleSurface( GetVRDevice()->GetRenderTargetDimension(), _vrSufaceScaleIdx );
 				_view->SetCamera( GetVRCamera() );
 
 				auto&	vr_cont = GetVRDevice()->GetControllers();
@@ -251,7 +239,7 @@ namespace FG
 			else
 			{
 				_viewMode	= EViewMode::Mono;
-				_targetSize	= uint2(float2(GetSurfaceSize()) * _sufaceScale + 0.5f);
+				_targetSize	= _ScaleSurface( GetSurfaceSize(), _sufaceScaleIdx );
 				_view->SetCamera( GetFPSCamera() );
 			}
 
@@ -314,23 +302,7 @@ namespace FG
 			CHECK_ERR( _frameGraph->Execute( cmdbuf ));
 			CHECK_ERR( _frameGraph->Flush() );
 
-			const auto&			queue		= GetVulkan().GetVkQueues()[0];
-			const auto&			vk_desc_l	= std::get<VulkanImageDesc>( _frameGraph->GetApiSpecificDescription( image_l ));
-			const auto&			vk_desc_r	= std::get<VulkanImageDesc>( _frameGraph->GetApiSpecificDescription( image_r ));
-			IVRDevice::VRImage	vr_img;
-
-			vr_img.currQueue		= queue.handle;
-			vr_img.queueFamilyIndex	= queue.familyIndex;
-			vr_img.dimension		= vk_desc_l.dimension.xy();
-			vr_img.bounds			= RectF{ 0.0f, 0.0f, 1.0f, 1.0f };
-			vr_img.format			= BitCast<VkFormat>(vk_desc_l.format);
-			vr_img.sampleCount		= vk_desc_l.samples;
-
-			vr_img.handle = BitCast<VkImage>(vk_desc_l.image);
-			GetVRDevice()->Submit( vr_img, IVRDevice::Eye::Left );
-					
-			vr_img.handle = BitCast<VkImage>(vk_desc_r.image);
-			GetVRDevice()->Submit( vr_img, IVRDevice::Eye::Right );
+			_VRPresent( GetVulkan().GetVkQueues()[0], image_l, image_r, false );
 		}
 		else
 		{
@@ -382,28 +354,9 @@ namespace FG
 				task = cmdbuf->AddTask( BlitImage{}.From( image_l ).To( sw_image ).SetFilter( EFilter::Linear )
 											.AddRegion( {}, int2(0), int2(img_dim), {}, int2(0), int2(sw_dim) )
 											.DependsOn( task ));
+
+				_DrawUI( cmdbuf, sw_image, {task} );
 			}
-
-			// draw ui
-			#ifdef FG_ENABLE_IMGUI
-			if ( _settingsWndOpen )
-			{
-				RawImageID	sw_image = cmdbuf->GetSwapchainImage( GetSwapchain() );
-
-				_UpdateUI( _frameGraph->GetDescription( sw_image ).dimension.xy() );
-
-				auto&	draw_data = *ImGui::GetDrawData();
-
-				if ( draw_data.TotalVtxCount > 0 )
-				{
-					LogicalPassID	pass_id = cmdbuf->CreateRenderPass( RenderPassDesc{ int2{float2{ draw_data.DisplaySize.x, draw_data.DisplaySize.y }} }
-													.AddViewport(float2{ draw_data.DisplaySize.x, draw_data.DisplaySize.y })
-													.AddTarget( RenderTargetID::Color_0, sw_image, EAttachmentLoadOp::Load, EAttachmentStoreOp::Store ));
-
-					task = _uiRenderer.Draw( cmdbuf, pass_id, {task} );
-				}
-			}
-			#endif
 
 			CHECK_ERR( _frameGraph->Execute( cmdbuf ));
 			CHECK_ERR( _frameGraph->Flush() );
@@ -411,28 +364,6 @@ namespace FG
 
 		_SetLastCommandBuffer( cmdbuf );
 		return true;
-	}
-
-/*
-=================================================
-	Destroy
-=================================================
-*/
-	void  Application::Destroy ()
-	{
-		_view.reset();
-		
-		#ifdef FG_ENABLE_IMGUI
-			_uiRenderer.Deinitialize( _frameGraph );
-		#endif
-
-		if ( _videoRecorder )
-		{
-			CHECK( _videoRecorder->End() );
-			_videoRecorder.reset();
-		}
-
-		_DestroyFrameGraph();
 	}
 	
 /*
@@ -571,198 +502,163 @@ namespace FG
 			break;
 		}
 	}
-	
+
 /*
 =================================================
-	_UpdateUI
+	OnUpdateUI
 =================================================
 */
-	bool  Application::_UpdateUI (const uint2 &dim)
+	void  Application::OnUpdateUI ()
 	{
 	#ifdef FG_ENABLE_IMGUI
-		ImGuiIO &	io = ImGui::GetIO();
-		CHECK_ERR( io.Fonts->IsBuilt() );
-
-		io.DisplaySize	= ImVec2{float(dim.x), float(dim.y)};
-		io.DeltaTime	= FrameTime().count();
-
-		CHECK_ERR( _UpdateInput() );
-
 		const ImVec4	red_col		{ 0.5f, 0.0f, 0.0f, 1.0f };
 		const ImVec4	green_col	{ 0.0f, 0.7f, 0.0f, 1.0f };
 
-		ImGui::NewFrame();
-			
-		if ( ImGui::Begin( "Shader settings", &_settingsWndOpen ))
+		// camera
 		{
-			// camera
-			{
-				ImGui::Text( "W/S - move camera forward/backward" );
-				ImGui::Text( "A/D - move camera left/right" );
-				ImGui::Text( "V/C - move camera up/down" );
-				ImGui::Text( "Y   - show/hide UI" );
-			}
-			ImGui::Separator();
+			ImGui::Text( "W/S - move camera forward/backward" );
+			ImGui::Text( "A/D - move camera left/right" );
+			ImGui::Text( "V/C - move camera up/down" );
+			ImGui::Text( "Y   - show/hide UI" );
+		}
+		ImGui::Separator();
 			
-			// shader
-			{
-				ImGui::Text( "Switch shader" );
+		// shader
+		{
+			ImGui::Text( "Switch shader" );
 
-				if ( ImGui::Button( " << ##PrevShader" ))
-					--_nextSample;
+			if ( ImGui::Button( " << ##PrevShader" ))
+				--_nextSample;
 			
-				ImGui::SameLine();
+			ImGui::SameLine();
 
-				if ( ImGui::Button( " >> ##NextShader" ))
-					++_nextSample;
+			if ( ImGui::Button( " >> ##NextShader" ))
+				++_nextSample;
 			
-				// pause
-				{
-					String	text;
-
-					if ( _freeze ) {
-						text = "Resume (F)";
-						ImGui::PushStyleColor( ImGuiCol_Button, red_col );
-					} else {
-						text = "Pause (F)";
-						ImGui::PushStyleColor( ImGuiCol_Button, green_col );
-					}
-
-					if ( ImGui::Button( text.c_str() ))
-					{
-						_skipLastTime	= _freeze;
-						_freeze			= not _freeze;
-					}
-
-					ImGui::PopStyleColor(1);
-				}
-
-				// pause rendering
-				if ( ImGui::Button( "Stop rendering (space)" ))
-				{
-					_skipLastTime	= _pause;
-					_pause			= not _pause;
-				}
-
-				if ( ImGui::Button( "Reload (R)" ))
-					_recompile = true;
-
-				if ( ImGui::Button( "Restart (T)" ))
-					_frameCounter = 0;
-
-				if ( ImGui::Button( "Reset position (P)" ))
-					_ResetPosition();
-				
-				ImGui::SameLine();
-				
-				if ( ImGui::Button( "Reset orientation" ))
-					_ResetOrientation();
-
-				float	surf = _sufaceScale;
-				ImGui::Text( "Surface scale" );
-				ImGui::SliderFloat( "##SurfaceScaleSlider", &surf, 0.25f, 2.0f );
-
-				// can't change surface scale when capturing video
-				if ( not _videoRecorder )
-					_sufaceScale = surf;
-			}
-			ImGui::Separator();
-
-			// custom sliders
+			// pause
 			{
-				ImGui::Text( "Custom sliders:" );
-				ImGui::SliderFloat( "##CustomSlider0", &_sliders[0], 0.0f, 1.0f );
-				ImGui::SliderFloat( "##CustomSlider1", &_sliders[1], 0.0f, 1.0f );
-				ImGui::SliderFloat( "##CustomSlider2", &_sliders[2], 0.0f, 1.0f );
-				ImGui::SliderFloat( "##CustomSlider3", &_sliders[3], 0.0f, 1.0f );
-			}
-			ImGui::Separator();
+				String	text;
 
-			// capture
-			{
-				// video
-				{
-					String	text;
-			
-					if ( _videoRecorder ) {
-						text = "Stop capture (U)";
-						ImGui::PushStyleColor( ImGuiCol_Button, red_col );
-					} else {
-						text = "Start capture (U)";
-						ImGui::PushStyleColor( ImGuiCol_Button, green_col );
-					}
-
-					if ( ImGui::Button( text.c_str() ))
-						_StartStopRecording();
-
-					ImGui::PopStyleColor(1);
-				}
-
-				if ( ImGui::Button( "Screenshot (I)" ))
-					_makeScreenshot = true;
-			}
-			ImGui::Separator();
-
-			// debugger
-			{
-				ImGui::Text( "G  - run shader debugger for pixel under cursor" );
-				ImGui::Text( "H  - run shader profiler for pixel under cursor" );
-				
-				if ( _showTimemap )
+				if ( _freeze ) {
+					text = "Resume (F)";
 					ImGui::PushStyleColor( ImGuiCol_Button, red_col );
-				else
+				} else {
+					text = "Pause (F)";
 					ImGui::PushStyleColor( ImGuiCol_Button, green_col );
+				}
 
-				if ( ImGui::Button( "Timemap" ))
-					_showTimemap = not _showTimemap;
+				if ( ImGui::Button( text.c_str() ))
+				{
+					_skipLastTime	= _freeze;
+					_freeze			= not _freeze;
+				}
 
 				ImGui::PopStyleColor(1);
 			}
-			ImGui::Separator();
 
-			// params
+			// pause rendering
+			if ( ImGui::Button( "Stop rendering (space)" ))
 			{
-				ImGui::Text( ("position:    "s << ToString( GetCamera().transform.position )).c_str() );
-				ImGui::Text( ("rotation:    "s << ToString( GetCamera().transform.orientation )).c_str() );
-				ImGui::Text( ("mouse coord: "s << ToString( GetMousePos() )).c_str() );
-				ImGui::Text( ("pixel color: "s << ToString( _selectedPixel )).c_str() );
+				_skipLastTime	= _pause;
+				_pause			= not _pause;
 			}
+
+			if ( ImGui::Button( "Reload (R)" ))
+				_recompile = true;
+
+			if ( ImGui::Button( "Restart (T)" ))
+				_frameCounter = 0;
+
+			if ( ImGui::Button( "Reset position (P)" ))
+				_ResetPosition();
+				
+			ImGui::SameLine();
+				
+			if ( ImGui::Button( "Reset orientation" ))
+				_ResetOrientation();
+
+			const float	old_fov = float(GetCameraFov());
+			float		new_fov = glm::degrees( old_fov );
+			ImGui::Text( "Camera FOV (for some shaders)" );
+			ImGui::SliderFloat( "##FOV", &new_fov, 10.0f, 110.0f );
+			new_fov = glm::radians( round( new_fov ));
+
+			if ( not Equals( new_fov, old_fov, _fovStep ))
+			{
+				_SetupCamera( Rad{ new_fov }, GetViewRange() );
+				_view->SetFov( Rad{ new_fov });
+			}
+
+			int		surf = _sufaceScaleIdx;
+			ImGui::Text( "Surface scale" );
+			ImGui::SliderInt( "##SurfaceScaleSlider", INOUT &surf, -2, 1, _SurfaceScaleName( _sufaceScaleIdx ));
+
+			// can't change surface scale when capturing video
+			if ( not _videoRecorder )
+				_sufaceScaleIdx = surf;
 		}
+		ImGui::Separator();
 
-		ImGui::End();
-		ImGui::Render();
-
-		return true;
-
-	#else
-		return true;
-	#endif
-	}
-
-/*
-=================================================
-	_UpdateInput
-=================================================
-*/
-	bool Application::_UpdateInput ()
-	{
-	#ifdef FG_ENABLE_IMGUI
-		ImGuiIO &	io = ImGui::GetIO();
-
-		for (size_t i = 0; i < _mouseJustPressed.size(); ++i)
+		// custom sliders
 		{
-			io.MouseDown[i] = (_mouseJustPressed[i] != EKeyAction::Up);
+			ImGui::Text( "Custom sliders:" );
+			ImGui::SliderFloat( "##CustomSlider0", INOUT &_sliders[0], 0.0f, 1.0f );
+			ImGui::SliderFloat( "##CustomSlider1", INOUT &_sliders[1], 0.0f, 1.0f );
+			ImGui::SliderFloat( "##CustomSlider2", INOUT &_sliders[2], 0.0f, 1.0f );
+			ImGui::SliderFloat( "##CustomSlider3", INOUT &_sliders[3], 0.0f, 1.0f );
 		}
+		ImGui::Separator();
 
-		io.MousePos = { GetMousePos().x, GetMousePos().y };
+		// capture
+		{
+			// video
+			{
+				String	text;
+			
+				if ( _videoRecorder ) {
+					text = "Stop capture (U)";
+					ImGui::PushStyleColor( ImGuiCol_Button, red_col );
+				} else {
+					text = "Start capture (U)";
+					ImGui::PushStyleColor( ImGuiCol_Button, green_col );
+				}
 
-		memset( io.NavInputs, 0, sizeof(io.NavInputs) );
-		return true;
+				if ( ImGui::Button( text.c_str() ))
+					_StartStopRecording();
 
-	#else
-		return true;
+				ImGui::PopStyleColor(1);
+			}
+
+			if ( ImGui::Button( "Screenshot (I)" ))
+				_makeScreenshot = true;
+		}
+		ImGui::Separator();
+
+		// debugger
+		{
+			ImGui::Text( "G  - run shader debugger for pixel under cursor" );
+			ImGui::Text( "H  - run shader profiler for pixel under cursor" );
+				
+			if ( _showTimemap )
+				ImGui::PushStyleColor( ImGuiCol_Button, red_col );
+			else
+				ImGui::PushStyleColor( ImGuiCol_Button, green_col );
+
+			if ( ImGui::Button( "Timemap" ))
+				_showTimemap = not _showTimemap;
+
+			ImGui::PopStyleColor(1);
+		}
+		ImGui::Separator();
+
+		// params
+		{
+			ImGui::Text( ("position:    "s << ToString( GetCamera().transform.position )).c_str() );
+			ImGui::Text( ("rotation:    "s << ToString( GetCamera().transform.orientation )).c_str() );
+			ImGui::Text( ("mouse coord: "s << ToString( GetMousePos() )).c_str() );
+			ImGui::Text( ("pixel color: "s << ToString( _selectedPixel )).c_str() );
+		}
 	#endif
 	}
-
 
 }	// FG

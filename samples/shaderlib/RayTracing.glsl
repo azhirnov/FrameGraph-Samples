@@ -140,7 +140,7 @@ bool  Ray_Contains (const Ray ray, const float3 point)
 void  Ray_Rotate (inout Ray ray, const quat rotation)
 {
 	// ray.origin - const
-	ray.dir = Normalize( QMul( rotation, ray.dir ) );
+	ray.dir = Normalize( QMul( rotation, ray.dir ));
 	ray.t	= Distance( ray.origin, ray.pos );
 	ray.pos	= ray.t * ray.dir;
 }

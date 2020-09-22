@@ -1,6 +1,40 @@
 // Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
+/*
+	docs:
+	https://en.wikipedia.org/wiki/Z-order_curve
 
-#include "framework/Vulkan/VulkanDeviceExt.h"
+	Z-Order for specific GPU:
+
+	Nvidia GTX 1070
+		[0,2] [1,2] [2,2] [3,2]
+		[0,3] [1,3] [2,3] [3,3]
+		[0,0] [1,0] [2,0] [3,0]
+		[0,1] [1,1] [2,1] [3,1]
+
+	Intel UHD 630
+		[0,0] [1,0] [2,0] [3,0]
+		[0,1] [1,1] [2,1] [3,1]
+		[0,2] [1,2] [2,2] [3,2]
+		[0,3] [1,3] [2,3] [3,3]
+		
+	Nvidia RTX 2080
+		[0,0] [1,0] [2,0] [3,0]
+		[0,1] [1,1] [2,1] [3,1]
+		[0,2] [1,2] [2,2] [3,2]
+		[0,3] [1,3] [2,3] [3,3]
+
+	AMD RX 570
+		[0,0] [1,0] [2,0] [3,0] [0,1] [1,1] [2,1] [3,1]
+		[4,0] [5,0] [6,0] [7,0] [4,1] [5,1] [6,1] [7,1]
+		[0,2] [1,2] [2,2] [3,2] [0,3] [1,3] [2,3] [3,3]
+		[4,2] [5,2] [6,2] [7,2] [4,3] [5,3] [6,3] [7,3]
+		[0,4] [1,4] [2,4] [3,4] [0,5] [1,5] [2,5] [3,5]
+		[4,4] [5,4] [6,4] [7,4] [4,5] [5,5] [6,5] [7,5]
+		[0,6] [1,6] [2,6] [3,6] [0,7] [1,7] [2,7] [3,7]
+		[4,6] [5,6] [6,6] [7,6] [4,7] [5,7] [6,7] [7,7]
+*/
+
+#include "framework/Vulkan/VulkanDevice.h"
 #include "framework/Vulkan/VulkanSwapchain.h"
 #include "framework/Window/WindowGLFW.h"
 #include "framework/Window/WindowSDL2.h"
@@ -12,7 +46,7 @@ namespace {
 class ZOrderPatternApp final : public IWindowEventListener, public VulkanDeviceFn
 {
 private:
-	VulkanDeviceExt			vulkan;
+	VulkanDeviceInitializer	vulkan;
 	WindowPtr				window;
 	SpvCompiler				spvCompiler;
 
@@ -61,18 +95,12 @@ bool ZOrderPatternApp::Initialize ()
 
 		CHECK_ERR( window->Create( { 800, 600 }, title ));
 		window->AddListener( this );
-
-		CHECK_ERR( vulkan.Create( window->GetVulkanSurface(),
-								  title, "Engine",
-								  VK_API_VERSION_1_1,
-								  "",
-								  {{ VK_QUEUE_PRESENT_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 0.0f }},
-								  VulkanDevice::GetRecomendedInstanceLayers(),
-								  VulkanDevice::GetRecomendedInstanceExtensions(),
-								  {}
-			));
 		
-		vulkan.CreateDebugUtilsCallback( VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT );
+		CHECK_ERR( vulkan.CreateInstance( window->GetVulkanSurface(), title, "Engine", vulkan.GetRecomendedInstanceLayers(), {}, {1,0} ));
+		CHECK_ERR( vulkan.ChooseHighPerformanceDevice() );
+		CHECK_ERR( vulkan.CreateLogicalDevice( Default, Default ));
+		
+		vulkan.CreateDebugCallback( DefaultDebugMessageSeverity );
 	}
 	return true;
 }
@@ -85,8 +113,9 @@ bool ZOrderPatternApp::Initialize ()
 void ZOrderPatternApp::Destroy ()
 {
 	VK_CALL( vkDeviceWaitIdle( vulkan.GetVkDevice() ));
-
-	vulkan.Destroy();
+	
+	vulkan.DestroyLogicalDevice();
+	vulkan.DestroyInstance();
 
 	window->Destroy();
 	window.reset();
@@ -154,7 +183,7 @@ bool ZOrderPatternApp::Run ()
 		for (uint y = 0; y < img_dim.y; ++y)
 		for (uint x = 0; x < img_dim.x; ++x)
 		{
-			mapped[y * img_dim.x + x] = x | (y << 16);
+			mapped[y * img_dim.x + x] = x | (y << 8);
 		}
 	}
 
@@ -172,7 +201,7 @@ bool ZOrderPatternApp::Run ()
 		info.sType			= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		info.flags			= 0;
 		info.imageType		= VK_IMAGE_TYPE_2D;
-		info.format			= VK_FORMAT_R32_UINT;
+		info.format			= VK_FORMAT_R8G8B8A8_UNORM;
 		info.extent			= { img_dim.x, img_dim.y, 1 };
 		info.mipLevels		= 1;
 		info.arrayLayers	= 1;
@@ -197,7 +226,7 @@ bool ZOrderPatternApp::Run ()
 		VkBufferCreateInfo	info = {};
 		info.sType			= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		info.flags			= 0;
-		info.size			= img_dim.x * img_dim.y * sizeof(uint);
+		info.size			= img_dim.x * img_dim.y * sizeof(*mapped);
 		info.usage			= VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		info.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;
 
@@ -263,7 +292,7 @@ bool ZOrderPatternApp::Run ()
 		VkBufferCopy	buf_copy = {};
 		buf_copy.srcOffset	= 0;
 		buf_copy.dstOffset	= 0;
-		buf_copy.size		= img_dim.x * img_dim.y * sizeof(uint);
+		buf_copy.size		= img_dim.x * img_dim.y * sizeof(*mapped);
 		vkCmdCopyBuffer( cmd_buffer, buffer, staging_buffer, 1, &buf_copy );
 
 		VK_CALL( vkEndCommandBuffer( cmd_buffer ));
@@ -283,7 +312,7 @@ bool ZOrderPatternApp::Run ()
 	
 	for (uint i = 0; i < data_size; ++i)
 	{
-		uint2	coord = uint2(mapped[i] & 0xFFFF, mapped[i] >> 16) + 1;
+		uint2	coord = uint2(mapped[i] & 0xFF, mapped[i] >> 8) + 1;
 
 		if ( max_coord.x == max_coord.y and (coord.x > max_coord.x or coord.y > max_coord.y) and i > 1 and max_coord.x * max_coord.y == i )
 			break;
@@ -300,7 +329,7 @@ bool ZOrderPatternApp::Run ()
 
 		for (uint i = 0; i < block_size and i < data_size; ++i)
 		{
-			uint2	coord = uint2(mapped[i] & 0xFFFF, mapped[i] >> 16);
+			uint2	coord = uint2(mapped[i] & 0xFF, mapped[i] >> 8);
 
 			str << '[' << ToString(coord.x) <<',' << ToString(coord.y) << ']' << (i and ((i+1) % max_coord.x == 0) ? '\n' : ' ');
 		}

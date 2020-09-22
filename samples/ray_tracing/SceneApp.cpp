@@ -6,6 +6,8 @@
 #include "scene/Renderer/Prototype/RendererPrototype.h"
 #include "scene/SceneManager/Simple/SimpleRayTracingScene.h"
 #include "scene/SceneManager/DefaultSceneManager.h"
+#include "stl/Math/Color.h"
+#include "stl/Algorithms/StringUtils.h"
 
 namespace FG
 {
@@ -37,11 +39,11 @@ namespace FG
 	Initialize
 =================================================
 */
-	bool SceneApp::Initialize ()
+	bool  SceneApp::Initialize ()
 	{
 		// will crash if it is not created as shared pointer
 		ASSERT( shared_from_this() );
-		
+
 		{
 			AppConfig	cfg;
 			cfg.surfaceSize		= uint2(1024, 768);
@@ -51,6 +53,8 @@ namespace FG
 
 			CHECK_ERR( _CreateFrameGraph( cfg ));
 		}
+
+		CHECK_ERR( _InitUI() );
 
 		// upload resource data
 		auto	cmdbuf = _frameGraph->Begin( CommandBufferDesc{ EQueueType::Graphics });
@@ -66,6 +70,7 @@ namespace FG
 
 			CHECK_ERR( _scene->Add( _LoadScene2( cmdbuf )) );
 		}
+
 		CHECK_ERR( _frameGraph->Execute( cmdbuf ));
 		CHECK_ERR( _frameGraph->Flush() );
 		
@@ -123,7 +128,7 @@ namespace FG
 	DrawScene
 =================================================
 */
-	bool SceneApp::DrawScene ()
+	bool  SceneApp::DrawScene ()
 	{
 		_scene->Draw({ shared_from_this() });
 		return true;
@@ -134,9 +139,9 @@ namespace FG
 	OnKey
 =================================================
 */
-	void SceneApp::OnKey (StringView key, EKeyAction action)
+	void  SceneApp::OnKey (StringView key, EKeyAction action)
 	{
-		BaseSceneApp::OnKey( key, action );
+		BaseSample::OnKey( key, action );
 	}
 
 /*
@@ -144,12 +149,13 @@ namespace FG
 	Prepare
 =================================================
 */
-	void SceneApp::Prepare (ScenePreRender &preRender)
+	void  SceneApp::Prepare (ScenePreRender &preRender)
 	{
 		_UpdateCamera();
 
 		LayerBits	layers;
 		layers[uint(ERenderLayer::RayTracing)] = true;
+		layers[uint(ERenderLayer::HUD)] = true;
 
 		preRender.AddCamera( GetCamera(), VecCast(GetSurfaceSize()), GetViewRange(), DetailLevelRange{}, ECameraType::Main, layers, shared_from_this() );
 	}
@@ -159,9 +165,17 @@ namespace FG
 	Draw
 =================================================
 */
-	void SceneApp::Draw (RenderQueue &) const
+	void  SceneApp::Draw (RenderQueue &rq) const
 	{
-		// TODO: draw UI
+	}
+
+/*
+=================================================
+	OnUpdateUI
+=================================================
+*/
+	void  SceneApp::OnUpdateUI ()
+	{
 	}
 
 }	// FG

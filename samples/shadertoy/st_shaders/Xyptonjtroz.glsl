@@ -256,8 +256,8 @@ vec4 RayTrace (const Ray ray, const vec2 fragCoord)
     col = fog(col, ro, rd, rz);
     
     //post
-    col = pow(col,vec3(0.8));
-    col *= 1.-smoothstep(0.1,2.,length(p));
+    //col = pow(col,vec3(0.8));
+    //col *= 1.-smoothstep(0.1,2.,length(p));
     
 	return vec4( col, 1.0 );
 }

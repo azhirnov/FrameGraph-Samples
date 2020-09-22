@@ -39,13 +39,5 @@ extern void UnitTest_SphericalCubeMath ()
 	Test_ForwardInverseProjection< IdentitySphericalCube >();
 	Test_ForwardInverseProjection< TangentialSphericalCube >();
 
-	double3	c0 = IdentitySphericalCube::Forward( double2{0.0, 1.0101}, ECubeFace::XPos );
-	double3	c1 = IdentitySphericalCube::Forward( double2{0.0, 1.01}, ECubeFace::XPos );
-	double3	c2 = IdentitySphericalCube::Forward( double2{0.0, 1.00997}, ECubeFace::XPos );
-
-	double3	b0 = IdentitySphericalCube::Forward( double2{1.01, 0.0}, ECubeFace::YNeg );
-	double3	b1 = IdentitySphericalCube::Forward( double2{1.00, 0.0}, ECubeFace::YNeg );
-	double3	b2 = IdentitySphericalCube::Forward( double2{0.99, 0.0}, ECubeFace::YNeg );
-
 	FG_LOGI( "UnitTest_SphericalCubeMath" );
 }

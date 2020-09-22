@@ -1,31 +1,20 @@
 // Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
-/*
-	docs:
-	https://github.com/KhronosGroup/GLSL/blob/master/extensions/nv/GLSL_NV_mesh_shader.txt
-	https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#drawing-mesh-shading
-	https://devblogs.nvidia.com/using-turing-mesh-shaders-nvidia-asteroids-demo/
-	https://devblogs.nvidia.com/introduction-turing-mesh-shaders/
-*/
 
 #include "framework/Vulkan/VulkanDevice.h"
 #include "framework/Vulkan/VulkanSwapchain.h"
 #include "framework/Window/WindowGLFW.h"
 #include "framework/Window/WindowSDL2.h"
 #include "compiler/SpvCompiler.h"
+#include "stl/Algorithms/StringUtils.h"
+#include "stl/Math/Color.h"
 
-#ifdef VK_NV_mesh_shader
+#ifdef VK_VERSION_1_1
 
 namespace {
 
-class MeshShaderApp final : public IWindowEventListener, public VulkanDeviceFn
+class SparseImageApp final : public IWindowEventListener, public VulkanDeviceFn
 {
-private:
-	struct UBuffer
-	{
-		float4		points[3];
-		float4		colors[3];
-	};
-
+	using TimePoint_t	= std::chrono::time_point< std::chrono::high_resolution_clock >;
 
 private:
 	VulkanDeviceInitializer	vulkan;
@@ -37,28 +26,34 @@ private:
 	VkQueue					cmdQueue		= VK_NULL_HANDLE;
 	VkCommandBuffer			cmdBuffers[2]	= {};
 	VkFence					fences[2]		= {};
-	VkSemaphore				semaphores[2]	= {};
+	VkSemaphore				semaphores[4]	= {};
 
 	VkRenderPass			renderPass		= VK_NULL_HANDLE;
 	VkFramebuffer			framebuffers[8]	= {};
 
-	VkPipeline				meshPipeline	= VK_NULL_HANDLE;
+	VkPipeline				pipeline		= VK_NULL_HANDLE;
 	VkPipelineLayout		pplnLayout		= VK_NULL_HANDLE;
-	VkShaderModule			meshShader		= VK_NULL_HANDLE;
+	VkShaderModule			vertShader		= VK_NULL_HANDLE;
 	VkShaderModule			fragShader		= VK_NULL_HANDLE;
-
+	
 	VkDescriptorSetLayout	dsLayout		= VK_NULL_HANDLE;
 	VkDescriptorPool		descriptorPool	= VK_NULL_HANDLE;
 	VkDescriptorSet			descriptorSet	= VK_NULL_HANDLE;
-
-	VkBuffer				uniformBuf		= VK_NULL_HANDLE;
+	
+	VkImage					sparseImage		= VK_NULL_HANDLE;
+	VkImageView				sparseImageView	= VK_NULL_HANDLE;
 	VkDeviceMemory			sharedMemory	= VK_NULL_HANDLE;
+	VkSampler				sampler			= VK_NULL_HANDLE;
+
+	Array<VkSparseImageMemoryBind>	imageBlocks;
 
 	bool					looping			= true;
 
+	static constexpr char	title[]			= "Sparse image sample";
+
 
 public:
-	MeshShaderApp ()
+	SparseImageApp ()
 	{
 		VulkanDeviceFn_Init( vulkan );
 	}
@@ -81,10 +76,17 @@ public:
 	bool CreateFramebuffers ();
 	void DestroyFramebuffers ();
 	bool CreateResources ();
+	bool CreateSampler ();
 	bool CreateDescriptorSet ();
-	bool CreateMeshPipeline ();
+	bool CreatePipeline ();
 
-	ND_ bool IsMeshShaderSupported () const		{ return vulkan.GetFeatures().meshShaderNV; }
+	ND_ bool IsSparseImageSupported () const
+	{
+		return	vulkan.GetProperties().features.sparseBinding			and
+				vulkan.GetProperties().features.sparseResidencyAliased	and
+				vulkan.GetProperties().features.sparseResidencyBuffer	and
+				vulkan.GetProperties().features.sparseResidencyImage2D;
+	}
 };
 
 
@@ -94,7 +96,7 @@ public:
 	OnKey
 =================================================
 */
-void MeshShaderApp::OnKey (StringView key, EKeyAction action)
+void SparseImageApp::OnKey (StringView key, EKeyAction action)
 {
 	if ( action != EKeyAction::Down )
 		return;
@@ -108,7 +110,7 @@ void MeshShaderApp::OnKey (StringView key, EKeyAction action)
 	OnResize
 =================================================
 */
-void MeshShaderApp::OnResize (const uint2 &size)
+void SparseImageApp::OnResize (const uint2 &size)
 {
 	VK_CALL( vkDeviceWaitIdle( vulkan.GetVkDevice() ));
 
@@ -116,7 +118,6 @@ void MeshShaderApp::OnResize (const uint2 &size)
 	DestroyFramebuffers();
 
 	CHECK( swapchain->Recreate( size ));
-
 	CHECK( CreateFramebuffers() );
 }
 
@@ -125,7 +126,7 @@ void MeshShaderApp::OnResize (const uint2 &size)
 	Initialize
 =================================================
 */
-bool MeshShaderApp::Initialize ()
+bool SparseImageApp::Initialize ()
 {
 # if defined(FG_ENABLE_GLFW)
 	window.reset( new WindowGLFW() );
@@ -140,16 +141,16 @@ bool MeshShaderApp::Initialize ()
 
 	// create window and vulkan device
 	{
-		const char	title[] = "Mesh Shader sample";
-
 		CHECK_ERR( window->Create( { 800, 600 }, title ));
 		window->AddListener( this );
 
-		CHECK_ERR( vulkan.CreateInstance( window->GetVulkanSurface(), title, "Engine", vulkan.GetRecomendedInstanceLayers(), {}, {1,0} ));
+		CHECK_ERR( vulkan.CreateInstance( window->GetVulkanSurface(), title, "Engine", vulkan.GetRecomendedInstanceLayers(), {}, {1,1} ));
 		CHECK_ERR( vulkan.ChooseHighPerformanceDevice() );
-		CHECK_ERR( vulkan.CreateLogicalDevice( Default, { VK_NV_MESH_SHADER_EXTENSION_NAME }));
+		CHECK_ERR( vulkan.CreateLogicalDevice( {{VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_SPARSE_BINDING_BIT}}, Default ));
 		
 		vulkan.CreateDebugCallback( DefaultDebugMessageSeverity );
+
+		CHECK_ERR( IsSparseImageSupported() );
 	}
 
 
@@ -174,8 +175,9 @@ bool MeshShaderApp::Initialize ()
 	CHECK_ERR( CreateRenderPass() );
 	CHECK_ERR( CreateFramebuffers() );
 	CHECK_ERR( CreateResources() );
+	CHECK_ERR( CreateSampler() );
 	CHECK_ERR( CreateDescriptorSet() );
-	CHECK_ERR( CreateMeshPipeline() );
+	CHECK_ERR( CreatePipeline() );
 	return true;
 }
 
@@ -184,7 +186,7 @@ bool MeshShaderApp::Initialize ()
 	Destroy
 =================================================
 */
-void MeshShaderApp::Destroy ()
+void SparseImageApp::Destroy ()
 {
 	VkDevice	dev = vulkan.GetVkDevice();
 
@@ -200,25 +202,29 @@ void MeshShaderApp::Destroy ()
 	}
 	vkDestroyCommandPool( dev, cmdPool, null );
 	vkDestroyRenderPass( dev, renderPass, null );
-	vkDestroyPipeline( dev, meshPipeline, null );
-	vkDestroyShaderModule( dev, meshShader, null );
-	vkDestroyShaderModule( dev, fragShader, null );
+	vkDestroyPipeline( dev, pipeline, null );
 	vkDestroyPipelineLayout( dev, pplnLayout, null );
+	vkDestroyShaderModule( dev, vertShader, null );
+	vkDestroyShaderModule( dev, fragShader, null );
 	vkDestroyDescriptorSetLayout( dev, dsLayout, null );
 	vkDestroyDescriptorPool( dev, descriptorPool, null );
-	vkDestroyBuffer( dev, uniformBuf, null );
+	vkDestroyImage( dev, sparseImage, null );
+	vkDestroyImageView( dev, sparseImageView, null );
+	vkDestroySampler( dev, sampler, null );
 	vkFreeMemory( dev, sharedMemory, null );
 
 	cmdPool			= VK_NULL_HANDLE;
 	cmdQueue		= VK_NULL_HANDLE;
-	meshPipeline	= VK_NULL_HANDLE;
-	meshShader		= VK_NULL_HANDLE;
-	fragShader		= VK_NULL_HANDLE;
+	pipeline		= VK_NULL_HANDLE;
 	pplnLayout		= VK_NULL_HANDLE;
+	vertShader		= VK_NULL_HANDLE;
+	fragShader		= VK_NULL_HANDLE;
 	dsLayout		= VK_NULL_HANDLE;
 	descriptorPool	= VK_NULL_HANDLE;
 	descriptorSet	= VK_NULL_HANDLE;
-	uniformBuf		= VK_NULL_HANDLE;
+	sampler			= VK_NULL_HANDLE;
+	sparseImage		= VK_NULL_HANDLE;
+	sparseImageView	= VK_NULL_HANDLE;
 	sharedMemory	= VK_NULL_HANDLE;
 
 	DestroyFramebuffers();
@@ -237,8 +243,10 @@ void MeshShaderApp::Destroy ()
 	Run
 =================================================
 */
-bool MeshShaderApp::Run ()
-{
+bool SparseImageApp::Run ()
+{	
+	TimePoint_t		last_sparse_rebind = TimePoint_t::clock::now();
+
 	for (uint frameId = 0; looping; frameId = ((frameId + 1) & 1))
 	{
 		if ( not window->Update() )
@@ -250,6 +258,46 @@ bool MeshShaderApp::Run ()
 			VK_CHECK( vkResetFences( vulkan.GetVkDevice(), 1, &fences[frameId] ));
 
 			VK_CALL( swapchain->AcquireNextImage( semaphores[0] ));
+		}
+		
+		// bind sparse memory to image
+		VkSemaphore		sparse_binding_sem = VK_NULL_HANDLE;
+		{
+			const TimePoint_t	time = TimePoint_t::clock::now();
+
+			if ( time - last_sparse_rebind > std::chrono::seconds(2) )
+			{
+				last_sparse_rebind	= time;
+				sparse_binding_sem	= semaphores[frameId + 2];
+
+				const uint	src_idx = uint(rand() % imageBlocks.size());
+				uint		dst_idx = src_idx;
+
+				while ( src_idx == dst_idx ) {
+					dst_idx = uint(rand() % imageBlocks.size());
+				}
+				
+				std::swap( imageBlocks[src_idx].memoryOffset, imageBlocks[dst_idx].memoryOffset );
+
+				const VkSparseImageMemoryBind	img_binds[] = {
+					imageBlocks[ src_idx ],
+					imageBlocks[ dst_idx ]
+				};
+
+				VkSparseImageMemoryBindInfo		img_info = {};
+				img_info.image		= sparseImage;
+				img_info.bindCount	= uint(CountOf( img_binds ));
+				img_info.pBinds		= img_binds;
+
+				VkBindSparseInfo				binding = {};
+				binding.sType				= VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
+				binding.imageBindCount		= 1;
+				binding.pImageBinds			= &img_info;
+				binding.signalSemaphoreCount= 1;
+				binding.pSignalSemaphores	= &sparse_binding_sem;
+
+				VK_CALL( vkQueueBindSparse( cmdQueue, 1, &binding, VK_NULL_HANDLE ));
+			}
 		}
 
 		// build command buffer
@@ -273,9 +321,9 @@ bool MeshShaderApp::Run ()
 				vkCmdBeginRenderPass( cmdBuffers[frameId], &begin, VK_SUBPASS_CONTENTS_INLINE );
 			}
 			
-			vkCmdBindPipeline( cmdBuffers[frameId], VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipeline );
 			vkCmdBindDescriptorSets( cmdBuffers[frameId], VK_PIPELINE_BIND_POINT_GRAPHICS, pplnLayout, 0, 1, &descriptorSet, 0, null );
-
+			vkCmdBindPipeline( cmdBuffers[frameId], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline );
+			
 			// set dynamic states
 			{
 				VkViewport	viewport = {};
@@ -292,16 +340,10 @@ bool MeshShaderApp::Run ()
 
 				vkCmdSetScissor( cmdBuffers[frameId], 0, 1, &scissor_rect );
 			}
-			
-			// draw with mesh shader
-			if ( IsMeshShaderSupported() )
+
+			// draw
 			{
-				vkCmdDrawMeshTasksNV( cmdBuffers[frameId], 1, 0 );
-			}
-			else
-			// draw with vertex shader
-			{
-				vkCmdDraw( cmdBuffers[frameId], 3, 1, 0, 0 );
+				vkCmdDraw( cmdBuffers[frameId], 4, 1, 0, 0 );
 			}
 
 			vkCmdEndRenderPass( cmdBuffers[frameId] );
@@ -313,18 +355,18 @@ bool MeshShaderApp::Run ()
 		// submit commands
 		{
 			VkSemaphore				signal_semaphores[] = { semaphores[1] };
-			VkSemaphore				wait_semaphores[]	= { semaphores[0] };
-			VkPipelineStageFlags	wait_dst_mask[]		= { VK_PIPELINE_STAGE_TRANSFER_BIT };
+			VkSemaphore				wait_semaphores[]	= { semaphores[0], sparse_binding_sem };
+			VkPipelineStageFlags	wait_dst_mask[]		= { VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT };
 			STATIC_ASSERT( CountOf(wait_semaphores) == CountOf(wait_dst_mask) );
 
 			VkSubmitInfo				submit_info = {};
 			submit_info.sType					= VK_STRUCTURE_TYPE_SUBMIT_INFO;
 			submit_info.commandBufferCount		= 1;
 			submit_info.pCommandBuffers			= &cmdBuffers[frameId];
-			submit_info.waitSemaphoreCount		= uint(CountOf(wait_semaphores));
+			submit_info.waitSemaphoreCount		= uint(CountOf( wait_semaphores )) - uint(sparse_binding_sem == VK_NULL_HANDLE);
 			submit_info.pWaitSemaphores			= wait_semaphores;
 			submit_info.pWaitDstStageMask		= wait_dst_mask;
-			submit_info.signalSemaphoreCount	= uint(CountOf(signal_semaphores));
+			submit_info.signalSemaphoreCount	= uint(CountOf( signal_semaphores ));
 			submit_info.pSignalSemaphores		= signal_semaphores;
 
 			VK_CHECK( vkQueueSubmit( cmdQueue, 1, &submit_info, fences[frameId] ));
@@ -354,7 +396,7 @@ bool MeshShaderApp::Run ()
 	CreateCommandBuffers
 =================================================
 */
-bool MeshShaderApp::CreateCommandBuffers ()
+bool SparseImageApp::CreateCommandBuffers ()
 {
 	VkCommandPoolCreateInfo		pool_info = {};
 	pool_info.sType				= VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -378,7 +420,7 @@ bool MeshShaderApp::CreateCommandBuffers ()
 	CreateSyncObjects
 =================================================
 */
-bool MeshShaderApp::CreateSyncObjects ()
+bool SparseImageApp::CreateSyncObjects ()
 {
 	VkDevice	dev = vulkan.GetVkDevice();
 
@@ -406,7 +448,7 @@ bool MeshShaderApp::CreateSyncObjects ()
 	CreateRenderPass
 =================================================
 */
-bool MeshShaderApp::CreateRenderPass ()
+bool SparseImageApp::CreateRenderPass ()
 {
 	// setup attachment
 	VkAttachmentDescription		attachments[1] = {};
@@ -472,7 +514,7 @@ bool MeshShaderApp::CreateRenderPass ()
 	CreateFramebuffers
 =================================================
 */
-bool MeshShaderApp::CreateFramebuffers ()
+bool SparseImageApp::CreateFramebuffers ()
 {
 	VkFramebufferCreateInfo	fb_info = {};
 	fb_info.sType			= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -497,7 +539,7 @@ bool MeshShaderApp::CreateFramebuffers ()
 	DestroyFramebuffers
 =================================================
 */
-void MeshShaderApp::DestroyFramebuffers ()
+void SparseImageApp::DestroyFramebuffers ()
 {
 	for (uint i = 0; i < swapchain->GetSwapchainLength(); ++i)
 	{
@@ -507,76 +549,303 @@ void MeshShaderApp::DestroyFramebuffers ()
 
 /*
 =================================================
+	CreateSampler
+=================================================
+*/
+bool SparseImageApp::CreateSampler ()
+{
+	VkSamplerCreateInfo		info = {};
+	info.sType				= VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	info.magFilter			= VK_FILTER_LINEAR;
+	info.minFilter			= VK_FILTER_LINEAR;
+	info.mipmapMode			= VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	info.addressModeU		= VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	info.addressModeV		= VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	info.addressModeW		= VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	info.mipLodBias			= 0.0f;
+	info.anisotropyEnable	= VK_FALSE;
+	//info.maxAnisotropy		= 0.0f;
+	info.compareEnable		= VK_FALSE;
+	//info.compareOp			= 
+	info.minLod				= -1000.0f;
+	info.maxLod				= +1000.0f;
+	//info.borderColor		= 
+	info.unnormalizedCoordinates = VK_FALSE;
+
+	VK_CHECK( vkCreateSampler( vulkan.GetVkDevice(), &info, null, OUT &sampler ));
+	return true;
+}
+
+/*
+=================================================
 	CreateResources
 =================================================
 */
-bool MeshShaderApp::CreateResources ()
+bool SparseImageApp::CreateResources ()
 {
-	VkDeviceSize				total_size		= 0;
-	uint						mem_type_bits	= 0;
-	VkMemoryPropertyFlags		mem_property	= 0;
-	Array<Function<void ()>>	bind_mem;
+	VkDeviceSize			total_size		= 0;
+	uint					mem_type_bits	= 0;
+	VkMemoryPropertyFlags	mem_property	= 0;
+	uint2					image_size;
+	const uint2				num_tiles		{ 4, 4 };
+	uint2					tile_size;
+	VkMemoryRequirements	img_mem_req		= {};
+	VkMemoryRequirements	buf_mem_req		= {};
+	const VkImageUsageFlags	image_usage		= VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	const VkFormat			img_format		= VK_FORMAT_R8G8B8A8_UNORM;
 
-	// create uniform buffer
+	// create sparse image
 	{
-		VkBufferCreateInfo	info = {};
-		info.sType			= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		info.flags			= 0;
-		info.size			= sizeof(UBuffer);
-		info.usage			= VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+		// find supported format
+		{
+			VkPhysicalDeviceSparseImageFormatInfo2	fmt_info = {};
+			fmt_info.sType		= VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2;
+			fmt_info.format		= img_format;
+			fmt_info.type		= VK_IMAGE_TYPE_2D;
+			fmt_info.samples	= VK_SAMPLE_COUNT_1_BIT;
+			fmt_info.usage		= image_usage;
+			fmt_info.tiling		= VK_IMAGE_TILING_OPTIMAL;
+
+			uint	count = 0;
+			vkGetPhysicalDeviceSparseImageFormatProperties2( vulkan.GetVkPhysicalDevice(), &fmt_info, OUT &count, null );
+			CHECK_ERR( count > 0 );
+
+			Array<VkSparseImageFormatProperties2>	fmt_properties{ count };
+			for (auto& prop : fmt_properties) {
+				prop.sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2;
+				prop.pNext = null;
+			}
+			vkGetPhysicalDeviceSparseImageFormatProperties2( vulkan.GetVkPhysicalDevice(), &fmt_info, OUT &count, fmt_properties.data() );
+
+			for (auto& prop : fmt_properties) {
+				if ( prop.properties.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT ) {
+					tile_size.x = prop.properties.imageGranularity.width;
+					tile_size.y = prop.properties.imageGranularity.height;
+					image_size  = tile_size * num_tiles;
+					break;
+				}
+			}
+			CHECK_ERR(All( tile_size > 0 ));
+			CHECK_ERR(All( image_size > 0 ));
+		}
+
+		VkImageCreateInfo	info = {};
+		info.sType			= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		info.flags			= VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT | VK_IMAGE_CREATE_SPARSE_ALIASED_BIT;
+		info.imageType		= VK_IMAGE_TYPE_2D;
+		info.format			= img_format;
+		info.extent			= { image_size.x, image_size.y, 1 };
+		info.mipLevels		= 1;
+		info.arrayLayers	= 1;
+		info.samples		= VK_SAMPLE_COUNT_1_BIT;
+		info.tiling			= VK_IMAGE_TILING_OPTIMAL;
+		info.usage			= image_usage;
 		info.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;
+		info.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
 
-		VK_CHECK( vkCreateBuffer( vulkan.GetVkDevice(), &info, null, OUT &uniformBuf ));
+		VK_CHECK( vkCreateImage( vulkan.GetVkDevice(), &info, null, OUT &sparseImage ));
+		
+		vkGetImageMemoryRequirements( vulkan.GetVkDevice(), sparseImage, OUT &img_mem_req );
 
-		VkMemoryRequirements	mem_req;
-		vkGetBufferMemoryRequirements( vulkan.GetVkDevice(), uniformBuf, OUT &mem_req );
+		uint	count = 0;
+		vkGetImageSparseMemoryRequirements( vulkan.GetVkDevice(), sparseImage, OUT &count, null );
 
-		VkDeviceSize	offset = AlignToLarger( total_size, mem_req.alignment );
-		total_size		 = offset + mem_req.size;
-		mem_type_bits	|= mem_req.memoryTypeBits;
+		Array<VkSparseImageMemoryRequirements>	sparse_req{ count };
+		vkGetImageSparseMemoryRequirements( vulkan.GetVkDevice(), sparseImage, OUT &count, sparse_req.data() );
+
+		VkDeviceSize	offset = AlignToLarger( total_size, img_mem_req.alignment );
+		total_size		 = offset + img_mem_req.size;
+		mem_type_bits	|= img_mem_req.memoryTypeBits;
 		mem_property	|= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-		bind_mem.push_back( [this, offset] () {
-			VK_CALL( vkBindBufferMemory( vulkan.GetVkDevice(), uniformBuf, sharedMemory, offset ));
-		});
-	}
+		VkImageViewCreateInfo	view = {};
+		view.sType				= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.image				= sparseImage;
+		view.viewType			= VK_IMAGE_VIEW_TYPE_2D;
+		view.format				= img_format;
+		view.components			= { VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
+		view.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
+		VK_CALL( vkCreateImageView( vulkan.GetVkDevice(), &view, null, OUT &sparseImageView ));
+	}
+	
 	// allocate memory
 	{
 		VkMemoryAllocateInfo	info = {};
 		info.sType				= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		info.allocationSize		= total_size;
+		info.allocationSize		= (total_size *= 2);
 
 		CHECK_ERR( vulkan.GetMemoryTypeIndex( mem_type_bits, mem_property, OUT info.memoryTypeIndex ));
 
 		VK_CHECK( vkAllocateMemory( vulkan.GetVkDevice(), &info, null, OUT &sharedMemory ));
 	}
 
-	// bind resources
-	for (auto& bind : bind_mem) {
-		bind();
+	// bind sparse memory to image
+	{
+		VkDeviceSize	mem_offset	= 0;
+
+		for (uint y = 0; y < num_tiles.y; ++y)
+		{
+			for (uint x = 0; x < num_tiles.x; ++x)
+			{
+				VkSparseImageMemoryBind		img_bind = {};
+				img_bind.subresource		= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0 };
+				img_bind.offset				= { int(tile_size.x * x), int(tile_size.y * y), 0 };
+				img_bind.extent				= { tile_size.x, tile_size.y, 1 };
+				img_bind.memory				= sharedMemory;
+				img_bind.memoryOffset		= mem_offset;
+				
+				ASSERT( img_bind.memoryOffset % img_mem_req.alignment == 0 );
+				imageBlocks.push_back( img_bind );
+
+				mem_offset += tile_size.x * tile_size.y * 4;
+			}
+		}
+
+		VkSparseImageMemoryBindInfo		img_info = {};
+		img_info.image			= sparseImage;
+		img_info.bindCount		= uint(imageBlocks.size());
+		img_info.pBinds			= imageBlocks.data();
+
+		VkBindSparseInfo		binding = {};
+		binding.sType			= VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
+		binding.imageBindCount	= 1;
+		binding.pImageBinds		= &img_info;
+
+		VK_CALL( vkQueueBindSparse( cmdQueue, 1, &binding, VK_NULL_HANDLE ));
+		VK_CALL( vkQueueWaitIdle( cmdQueue ));
 	}
 
-	// update resources
+	// create render pass
+	VkRenderPass	temp_rp = VK_NULL_HANDLE;
+	{
+		// setup attachment
+		VkAttachmentDescription		attachments[1] = {};
+
+		attachments[0].format			= img_format;
+		attachments[0].samples			= VK_SAMPLE_COUNT_1_BIT;
+		attachments[0].loadOp			= VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachments[0].storeOp			= VK_ATTACHMENT_STORE_OP_STORE;
+		attachments[0].stencilLoadOp	= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachments[0].stencilStoreOp	= VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachments[0].initialLayout	= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		attachments[0].finalLayout		= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+
+		// setup subpasses
+		VkSubpassDescription	subpasses[1]		= {};
+		VkAttachmentReference	attachment_ref[1]	= {};
+
+		attachment_ref[0] = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+
+		subpasses[0].pipelineBindPoint		= VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpasses[0].colorAttachmentCount	= 1;
+		subpasses[0].pColorAttachments		= &attachment_ref[0];
+
+
+		// setup dependencies
+		VkSubpassDependency		dependencies[2] = {};
+
+		dependencies[0].srcSubpass		= VK_SUBPASS_EXTERNAL;
+		dependencies[0].dstSubpass		= 0;
+		dependencies[0].srcStageMask	= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+		dependencies[0].dstStageMask	= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependencies[0].srcAccessMask	= 0;
+		dependencies[0].dstAccessMask	= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependencies[0].dependencyFlags	= VK_DEPENDENCY_BY_REGION_BIT;
+
+		dependencies[1].srcSubpass		= 0;
+		dependencies[1].dstSubpass		= VK_SUBPASS_EXTERNAL;
+		dependencies[1].srcStageMask	= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependencies[1].dstStageMask	= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+		dependencies[1].srcAccessMask	= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependencies[1].dstAccessMask	= 0;
+		dependencies[1].dependencyFlags	= VK_DEPENDENCY_BY_REGION_BIT;
+
+
+		// setup create info
+		VkRenderPassCreateInfo	info = {};
+		info.sType				= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		info.flags				= 0;
+		info.attachmentCount	= uint(CountOf( attachments ));
+		info.pAttachments		= attachments;
+		info.subpassCount		= uint(CountOf( subpasses ));
+		info.pSubpasses			= subpasses;
+		info.dependencyCount	= uint(CountOf( dependencies ));
+		info.pDependencies		= dependencies;
+
+		VK_CHECK( vkCreateRenderPass( vulkan.GetVkDevice(), &info, null, OUT &temp_rp ));
+	}
+	
+	// create framebuffer
+	VkFramebuffer	temp_fb;
+	{
+		VkFramebufferCreateInfo	fb_info = {};
+		fb_info.sType			= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		fb_info.renderPass		= temp_rp;
+		fb_info.attachmentCount	= 1;
+		fb_info.width			= image_size.x;
+		fb_info.height			= image_size.y;
+		fb_info.layers			= 1;
+		fb_info.pAttachments	= &sparseImageView;
+
+		VK_CALL( vkCreateFramebuffer( vulkan.GetVkDevice(), &fb_info, null, OUT &temp_fb ));
+	}
+
+	// update image
 	{
 		VkCommandBufferBeginInfo	begin_info = {};
 		begin_info.sType	= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		begin_info.flags	= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 		VK_CALL( vkBeginCommandBuffer( cmdBuffers[0], &begin_info ));
+		
+		// undefined -> color_attachment
+		VkImageMemoryBarrier	barrier = {};
+		barrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.image				= sparseImage;
+		barrier.oldLayout			= VK_IMAGE_LAYOUT_UNDEFINED;
+		barrier.newLayout			= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		barrier.srcAccessMask		= 0;
+		barrier.dstAccessMask		= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		barrier.srcQueueFamilyIndex	= VK_QUEUE_FAMILY_IGNORED;
+		barrier.dstQueueFamilyIndex	= VK_QUEUE_FAMILY_IGNORED;
+		barrier.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
-		// update uniform buffer
+		vkCmdPipelineBarrier( cmdBuffers[0],
+								VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+								0, null, 0, null, 1, &barrier );
+		
+		for (uint y = 0; y < num_tiles.y; ++y)
 		{
-			UBuffer		temp;
-			temp.points[0] = {  0.0f, -0.5f,  0.0f, 1.0f };
-			temp.points[1] = {  0.5f,  0.5f,  0.0f, 1.0f };
-			temp.points[2] = { -0.5f,  0.5f,  0.0f, 1.0f };
+			for (uint x = 0; x < num_tiles.x; ++x)
+			{
+				RGBA32f					color		{ HSVColor{float(x + y * num_tiles.x) / float(num_tiles.x * num_tiles.y)} };
+				VkClearValue			clear_value = {{{ color.r, color.g, color.b, color.a }}};
+				VkRenderPassBeginInfo	begin		= {};
+				begin.sType				= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+				begin.framebuffer		= temp_fb;
+				begin.renderPass		= temp_rp;
+				begin.renderArea		= { int(tile_size.x * x), int(tile_size.y * y), {tile_size.x, tile_size.y} };
+				begin.clearValueCount	= 1;
+				begin.pClearValues		= &clear_value;
 
-			temp.colors[0] = {  1.0f,  0.0f,  0.0f, 1.0f };
-			temp.colors[1] = {  0.0f,  1.0f,  0.0f, 1.0f };
-			temp.colors[2] = {  0.0f,  0.0f,  1.0f, 1.0f };
-
-			vkCmdUpdateBuffer( cmdBuffers[0], uniformBuf, 0, sizeof(temp), &temp );
+				vkCmdBeginRenderPass( cmdBuffers[0], &begin, VK_SUBPASS_CONTENTS_INLINE );
+				vkCmdEndRenderPass( cmdBuffers[0] );
+			}
 		}
+
+		// color_attachment -> shader_read_only
+		barrier.oldLayout			= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		barrier.newLayout			= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		barrier.srcAccessMask		= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		barrier.dstAccessMask		= VK_ACCESS_SHADER_READ_BIT;
+		barrier.srcQueueFamilyIndex	= VK_QUEUE_FAMILY_IGNORED;
+		barrier.dstQueueFamilyIndex	= VK_QUEUE_FAMILY_IGNORED;
+		barrier.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+
+		vkCmdPipelineBarrier( cmdBuffers[0],
+								VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+								0, null, 0, null, 1, &barrier );
 
 		VK_CALL( vkEndCommandBuffer( cmdBuffers[0] ));
 
@@ -586,9 +855,11 @@ bool MeshShaderApp::CreateResources ()
 		submit_info.pCommandBuffers		= &cmdBuffers[0];
 
 		VK_CHECK( vkQueueSubmit( cmdQueue, 1, &submit_info, VK_NULL_HANDLE ));
+		VK_CALL( vkQueueWaitIdle( cmdQueue ));
 	}
 
-	VK_CALL( vkQueueWaitIdle( cmdQueue ));
+	vkDestroyRenderPass( vulkan.GetVkDevice(), temp_rp, null );
+	vkDestroyFramebuffer( vulkan.GetVkDevice(), temp_fb, null );
 	return true;
 }
 
@@ -597,15 +868,15 @@ bool MeshShaderApp::CreateResources ()
 	CreateDescriptorSet
 =================================================
 */
-bool MeshShaderApp::CreateDescriptorSet ()
+bool SparseImageApp::CreateDescriptorSet ()
 {
 	// create layout
 	{
 		VkDescriptorSetLayoutBinding		binding[1] = {};
 		binding[0].binding			= 0;
-		binding[0].descriptorType	= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		binding[0].descriptorType	= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		binding[0].descriptorCount	= 1;
-		binding[0].stageFlags		= IsMeshShaderSupported() ? VK_SHADER_STAGE_MESH_BIT_NV : VK_SHADER_STAGE_VERTEX_BIT;
+		binding[0].stageFlags		= VK_SHADER_STAGE_FRAGMENT_BIT;
 
 		VkDescriptorSetLayoutCreateInfo		info = {};
 		info.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -618,7 +889,7 @@ bool MeshShaderApp::CreateDescriptorSet ()
 	// create pool
 	{
 		const VkDescriptorPoolSize		sizes[] = {
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 100 }
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 100 }
 		};
 
 		VkDescriptorPoolCreateInfo		info = {};
@@ -640,21 +911,21 @@ bool MeshShaderApp::CreateDescriptorSet ()
 
 		VK_CHECK( vkAllocateDescriptorSets( vulkan.GetVkDevice(), &info, OUT &descriptorSet ));
 	}
-
+	
 	// update descriptor set
 	{
-		VkDescriptorBufferInfo	buffers[1] = {};
-		buffers[0].buffer		= uniformBuf;
-		buffers[0].offset		= 0;
-		buffers[0].range		= VK_WHOLE_SIZE;
+		VkDescriptorImageInfo	textures[1] = {};
+		textures[0].imageLayout	= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		textures[0].imageView	= sparseImageView;
+		textures[0].sampler		= sampler;
 
 		VkWriteDescriptorSet	writes[1] = {};
 		writes[0].sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[0].dstSet			= descriptorSet;
 		writes[0].dstBinding		= 0;
-		writes[0].descriptorCount	= uint(CountOf( buffers ));
-		writes[0].descriptorType	= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		writes[0].pBufferInfo		= buffers;
+		writes[0].descriptorCount	= uint(CountOf( textures ));
+		writes[0].descriptorType	= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		writes[0].pImageInfo		= textures;
 
 		vkUpdateDescriptorSets( vulkan.GetVkDevice(), uint(CountOf( writes )), writes, 0, null );
 	}
@@ -663,86 +934,41 @@ bool MeshShaderApp::CreateDescriptorSet ()
 
 /*
 =================================================
-	CreateMeshPipeline
+	CreatePipeline
 =================================================
 */
-bool MeshShaderApp::CreateMeshPipeline ()
+bool SparseImageApp::CreatePipeline ()
 {
-	// create mesh shader
-	if ( IsMeshShaderSupported() )
-	{
-		static const char	mesh_shader_source[] = R"#(
-#extension GL_NV_mesh_shader : require
-
-layout(local_size_x=3) in;
-layout(triangles) out;
-layout(max_vertices=3, max_primitives=1) out;
-
-//out uint gl_PrimitiveCountNV;
-//out uint gl_PrimitiveIndicesNV[]; // [max_primitives * 3 for triangles]
-
-out gl_MeshPerVertexNV {
-	vec4	gl_Position;
-} gl_MeshVerticesNV[]; // [max_vertices]
-
-layout(location = 0) out MeshOutput {
-	vec4	color;
-} Output[]; // [max_vertices]
-
-layout(binding = 0, std140) uniform UBuffer {
-	vec4	points[3];
-	vec4	colors[3];
-} ub;
-
-void main ()
-{
-	const uint I = gl_LocalInvocationID.x;
-
-	gl_MeshVerticesNV[I].gl_Position	= ub.points[I];
-	Output[I].color						= ub.colors[I];
-	gl_PrimitiveIndicesNV[I]			= I;
-
-	if ( I == 0 )
-		gl_PrimitiveCountNV = 1;
-}
-)#";
-		CHECK_ERR( spvCompiler.Compile( OUT meshShader, vulkan, {mesh_shader_source}, "main", EShLangMeshNV ));
-	}
-	else
-
 	// create vertex shader
 	{
 		static const char	vert_shader_source[] = R"#(
-layout(binding = 0, std140) uniform UBuffer {
-	vec4	points[3];
-	vec4	colors[3];
-} ub;
-
-layout(location = 0) out MeshOutput {
-	vec4	color;
-} Output;
+const vec2	g_Positions[4] = {
+	vec2( -1.0,  1.0 ),
+	vec2( -1.0, -1.0 ),
+	vec2(  1.0,  1.0 ),
+	vec2(  1.0, -1.0 )
+};
+layout(location = 0) out vec2  v_TexCoord;
 
 void main()
 {
-	gl_Position  = ub.points[gl_VertexIndex];
-	Output.color = ub.colors[gl_VertexIndex];
+	gl_Position = vec4( g_Positions[gl_VertexIndex], 0.0, 1.0 );
+	v_TexCoord  = g_Positions[gl_VertexIndex] * 0.5 + 0.5;
 }
 )#";
-		CHECK_ERR( spvCompiler.Compile( OUT meshShader, vulkan, {vert_shader_source}, "main", EShLangVertex ));
+		CHECK_ERR( spvCompiler.Compile( OUT vertShader, vulkan, {vert_shader_source}, "main", EShLangVertex ));
 	}
 
 	// create fragment shader
 	{
 		static const char	frag_shader_source[] = R"#(
 layout(location = 0) out vec4  out_Color;
-
-layout(location = 0) in MeshOutput {
-	vec4	color;
-} Input;
+layout(location = 0) in  vec2  v_TexCoord;
+layout(binding = 0) uniform sampler2D un_Texture;
 
 void main ()
 {
-	out_Color = Input.color;
+	out_Color = texture( un_Texture, v_TexCoord );
 }
 )#";
 		CHECK_ERR( spvCompiler.Compile( OUT fragShader, vulkan, {frag_shader_source}, "main", EShLangFragment ));
@@ -762,8 +988,8 @@ void main ()
 
 	VkPipelineShaderStageCreateInfo			stages[2] = {};
 	stages[0].sType		= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	stages[0].stage		= IsMeshShaderSupported() ? VK_SHADER_STAGE_MESH_BIT_NV : VK_SHADER_STAGE_VERTEX_BIT;
-	stages[0].module	= meshShader;
+	stages[0].stage		= VK_SHADER_STAGE_VERTEX_BIT;
+	stages[0].module	= vertShader;
 	stages[0].pName		= "main";
 	stages[1].sType		= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	stages[1].stage		= VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -775,7 +1001,7 @@ void main ()
 	
 	VkPipelineInputAssemblyStateCreateInfo	input_assembly = {};
 	input_assembly.sType	= VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	input_assembly.topology	= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	input_assembly.topology	= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 
 	VkPipelineViewportStateCreateInfo		viewport = {};
 	viewport.sType			= VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -822,7 +1048,7 @@ void main ()
 	info.stageCount				= uint(CountOf( stages ));
 	info.pStages				= stages;
 	info.pViewportState			= &viewport;
-	info.pVertexInputState		= &vertex_input;		// ignored in mesh shader
+	info.pVertexInputState		= &vertex_input;
 	info.pInputAssemblyState	= &input_assembly;
 	info.pRasterizationState	= &rasterization;
 	info.pMultisampleState		= &multisample;
@@ -833,19 +1059,19 @@ void main ()
 	info.renderPass				= renderPass;
 	info.subpass				= 0;
 
-	VK_CHECK( vkCreateGraphicsPipelines( vulkan.GetVkDevice(), VK_NULL_HANDLE, 1, &info, null, OUT &meshPipeline ));
+	VK_CHECK( vkCreateGraphicsPipelines( vulkan.GetVkDevice(), VK_NULL_HANDLE, 1, &info, null, OUT &pipeline ));
 	return true;
 }
 }	// anonymous namespace
 
 /*
 =================================================
-	MeshShader_Sample1
+	SparseImage_Sample2
 =================================================
 */
-extern void MeshShader_Sample1 ()
+extern void SparseImage_Sample2 ()
 {
-	MeshShaderApp	app;
+	SparseImageApp	app;
 	
 	if ( app.Initialize() )
 	{
@@ -856,7 +1082,7 @@ extern void MeshShader_Sample1 ()
 
 #else
 
-extern void MeshShader_Sample1 ()
+extern void SparseImage_Sample2 ()
 {}
 
-#endif	// VK_NV_mesh_shader
+#endif	// VK_VERSION_1_1

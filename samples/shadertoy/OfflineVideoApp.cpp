@@ -21,7 +21,11 @@ namespace FG
 =================================================
 */
 	OfflineVideoApp::~OfflineVideoApp ()
-	{}
+	{
+		_view.reset();
+
+		_StopRecording();
+	}
 
 /*
 =================================================
@@ -153,19 +157,6 @@ namespace FG
 
 		_SetLastCommandBuffer( cmdbuf );
 		return true;
-	}
-
-/*
-=================================================
-	Destroy
-=================================================
-*/
-	void  OfflineVideoApp::Destroy ()
-	{
-		_view.reset();
-
-		_DestroyFrameGraph();
-		_StopRecording();
 	}
 
 /*

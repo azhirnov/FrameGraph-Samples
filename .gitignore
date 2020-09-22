@@ -1,4 +1,6 @@
 /build
 *.user
 *.glsl_dbg
-samples/shadertoy/screenshots
+/samples/shadertoy/screenshots
+/FrameGraph/external/stb
+/FrameGraph/external/tinyobj

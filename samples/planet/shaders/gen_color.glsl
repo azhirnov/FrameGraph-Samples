@@ -1,7 +1,7 @@
 // Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 
 #extension GL_GOOGLE_include_directive : require
-#extension GL_KHR_memory_scope_semantics : require
+//#extension GL_KHR_memory_scope_semantics : require
 #extension GL_EXT_control_flow_attributes : require
 
 layout (local_size_x_id = 0, local_size_y_id = 1, local_size_z = 1) in;
@@ -44,19 +44,23 @@ void main ()
 		float2	ncoord	= ToSNorm( float2(coord) / float2(pc.faceDim - 1) );
 		sphere_pos		= PROJECTION( ncoord, pc.face );
 	
-		s_Positions[ gl_LocalInvocationIndex ] = sphere_pos * (1.0 + height);
-		s_Normals[ gl_LocalInvocationIndex ]   = norm;
-		memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsRelease );
+		s_Positions[ GetLocalIndex() ] = sphere_pos * (1.0 + height);
+		s_Normals[ GetLocalIndex() ]   = norm;
 	}
 
+	//memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsRelease );
+	//controlBarrier( gl_ScopeWorkgroup, gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsAcquireRelease );
+	//memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsAcquire );
+
+	memoryBarrierShared();
 	barrier();
-	memoryBarrier( gl_ScopeWorkgroup, gl_StorageSemanticsShared, gl_SemanticsAcquire );
+	memoryBarrierShared();
 
 
 	float3	albedo		= float3(1.0);
 	float	emission	= 0.0;
 	float	temperature	= 0.0;
-	float3	pos			= s_Positions[ gl_LocalInvocationIndex ];
+	float3	pos			= s_Positions[ GetLocalIndex() ];
 
 	float	biom		= DHash13( Voronoi( Turbulence( sphere_pos * 8.0, 1.0, 2.0, 0.6, 7 ), float2(3.9672) ).icenter );
 	int		mtr_id		= int(biom * 255.0f) & 0xF;

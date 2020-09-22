@@ -121,7 +121,7 @@ quat  QMul (const quat left, const quat right)
 					  Cross( left.data.xyz, right.data.xyz );
 
 	float4	dt		= left.data.xyzw * right.data.xyzw;
-	ret.data.w		= Dot( dt, float4( -1.0, -1.0, -1.0, 1.0 ) );
+	ret.data.w		= Dot( dt, float4( -1.0, -1.0, -1.0, 1.0 ));
 
 	return ret;
 }

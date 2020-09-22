@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "scene/BaseSceneApp.h"
+#include "BaseSample.h"
 #include "Texture.h"
 #include "Geometry.h"
 #include "Shader.h"
@@ -17,7 +17,7 @@ namespace FG
 	// Sky Engine
 	//
 
-	class SkyEngine final : public BaseSceneApp
+	class SkyEngine final : public BaseSample
 	{
 	// variables
 	private:
@@ -112,7 +112,7 @@ namespace FG
 
 		bool  _LoadImage (const CommandBuffer &cmdbuf, StringView filename, OUT ImageID &id);
 		
-		ND_ static String  _LoadShader (StringView filename);
+		ND_ static String  _LoadShader (NtStringView filename)	{ return BaseSample::_LoadShader( String{FG_DATA_PATH} + filename.c_str()); }
 	};
 
 }	// FG

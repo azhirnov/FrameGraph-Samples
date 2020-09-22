@@ -3,11 +3,6 @@
 #include "ParticlesApp.h"
 #include "pipeline_compiler/VPipelineCompiler.h"
 #include "stl/Algorithms/StringUtils.h"
-#include "stl/Stream/FileStream.h"
-
-#ifdef FG_ENABLE_IMGUI
-#	include "imgui_internal.h"
-#endif
 
 namespace FG
 {
@@ -21,15 +16,12 @@ namespace FG
 	{
 		if ( _frameGraph )
 		{
-		#ifdef FG_ENABLE_IMGUI
-			_uiRenderer.Deinitialize( _frameGraph );
-		#endif
-
-			_frameGraph->ReleaseResource( _colorBuffer1 );
-			_frameGraph->ReleaseResource( _colorBuffer2 );
+			_frameGraph->ReleaseResource( _colorBuffer[0] );
+			_frameGraph->ReleaseResource( _colorBuffer[1] );
 			_frameGraph->ReleaseResource( _depthBuffer );
 
-			_frameGraph->ReleaseResource( _cameraUB );
+			_frameGraph->ReleaseResource( _cameraUB[0] );
+			_frameGraph->ReleaseResource( _cameraUB[1] );
 			_frameGraph->ReleaseResource( _particlesUB );
 			_frameGraph->ReleaseResource( _particlesBuf );
 			
@@ -51,18 +43,17 @@ namespace FG
 		cfg.windowTitle			= "Particle renderer";
 		cfg.shaderDirectories	= { FG_DATA_PATH "../shaderlib", FG_DATA_PATH "shaders" };
 		cfg.dbgOutputPath		= FG_DATA_PATH "_debug_output";
-		cfg.vsync				= true;
+		//cfg.vrMode				= AppConfig::EVRMode::Emulator;
+		//cfg.enableDebugLayers	= false;
+		//cfg.vsync				= true;
 
 		CHECK_ERR( _CreateFrameGraph( cfg ));
 
-		_linearSampler = _frameGraph->CreateSampler( SamplerDesc{}.SetAddressMode( EAddressMode::Repeat )
-								.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Linear )).Release();
-		
-		_linearClampSampler = _frameGraph->CreateSampler( SamplerDesc{}.SetAddressMode( EAddressMode::ClampToEdge )
-								.SetFilter( EFilter::Linear, EFilter::Linear, EMipmapFilter::Linear )).Release();
+		CHECK_ERR( _InitUI() );
 
-		_cameraUB = _frameGraph->CreateBuffer( BufferDesc{ SizeOf<CameraUB>, EBufferUsage::Uniform | EBufferUsage::Transfer }, Default, "CameraUB" );
-		CHECK_ERR( _cameraUB );
+		_cameraUB[0] = _frameGraph->CreateBuffer( BufferDesc{ SizeOf<CameraUB>, EBufferUsage::Uniform | EBufferUsage::Transfer }, Default, "CameraUB" );
+		_cameraUB[1] = _frameGraph->CreateBuffer( BufferDesc{ SizeOf<CameraUB>, EBufferUsage::Uniform | EBufferUsage::Transfer }, Default, "CameraUB" );
+		CHECK_ERR( _cameraUB[0] and _cameraUB[1] );
 		
 		_particlesUB = _frameGraph->CreateBuffer( BufferDesc{ SizeOf<ParticlesUB>, EBufferUsage::Uniform | EBufferUsage::Transfer }, Default, "ParticlesUB" );
 		CHECK_ERR( _particlesUB );
@@ -77,37 +68,9 @@ namespace FG
 		_numParticles	= _maxParticles / 4;
 		_startTime		= CurrentTime();
 		_numSteps		= 20;
-		
-		// initialize imgui and renderer
-		#ifdef FG_ENABLE_IMGUI
-		{
-			IMGUI_CHECKVERSION();
-			ImGui::CreateContext();
-			ImGui::StyleColorsDark();
 
-			CHECK_ERR( _uiRenderer.Initialize( _frameGraph, GImGui ));
-			_mouseJustPressed.fill( EKeyAction::Up );
-		}
-		#endif
-		
-		GetFPSCamera().SetPosition({ 0.0f, 0.0f, 10.0f });
+		_ResetPosition();
 		return true;
-	}
-
-/*
-=================================================
-	_LoadShader
-=================================================
-*/
-	String  ParticlesApp::_LoadShader (StringView filename)
-	{
-		FileRStream		file{ String{FG_DATA_PATH} << filename };
-		CHECK_ERR( file.IsOpen() );
-
-		String	str;
-		CHECK_ERR( file.Read( size_t(file.Size()), OUT str ));
-
-		return str;
 	}
 
 /*
@@ -119,31 +82,47 @@ namespace FG
 	{
 		CommandBuffer	cmdbuf		= _frameGraph->Begin( CommandBufferDesc{ EQueueType::Graphics });
 		const uint2		sw_dim		= GetSurfaceSize();
-		uint2			surf_dim	= uint2(float2(sw_dim) * (_halfSurfaceSize ? 0.5f : 1.0f) + 0.5f);
+		uint2			surf_dim	= _ScaleSurface( sw_dim, _sufaceScaleIdx );
 		
+		_UpdateCamera();
+
+		// update camera
 		if ( IsActiveVR() )
 		{
-			surf_dim = uint2(float2(GetVRDevice()->GetRenderTargetDimension()) * (_halfSurfaceSize ? 0.5f : 1.0f) + 0.5f);
-		}
+			surf_dim = _ScaleSurface( GetVRDevice()->GetRenderTargetDimension(), _sufaceScaleIdx );
 
-		// update
-		{
-			_UpdateUI();
-			_UpdateCamera();
+			auto&		vr = GetVRCamera();
+			CameraUB	camera;
+
+			camera.proj			= vr.ToProjectionMatrix()[0];
+			camera.modelView	= vr.ToModelViewMatrix()[0];
+			camera.modelViewProj= vr.ToModelViewProjMatrix()[0];
+			camera.viewport		= float2(surf_dim);
+			camera.clipPlanes	= VecCast(GetViewRange());
+			cmdbuf->AddTask( UpdateBuffer{}.SetBuffer( _cameraUB[0] ).AddData( &camera, 1 ));
 			
-			CameraUB			camera;
+			camera.proj			= vr.ToProjectionMatrix()[1];
+			camera.modelView	= vr.ToModelViewMatrix()[1];
+			camera.modelViewProj= vr.ToModelViewProjMatrix()[1];
+			cmdbuf->AddTask( UpdateBuffer{}.SetBuffer( _cameraUB[1] ).AddData( &camera, 1 ));
+		}
+		else
+		{
+			CameraUB	camera;
 			camera.proj			= GetCamera().projection;
 			camera.modelView	= GetCamera().ToModelViewMatrix();
 			camera.modelViewProj= GetCamera().ToModelViewProjMatrix();
 			camera.viewport		= float2(surf_dim);
 			camera.clipPlanes	= VecCast(GetViewRange());
+			cmdbuf->AddTask( UpdateBuffer{}.SetBuffer( _cameraUB[0] ).AddData( &camera, 1 ));
+		}
 
+		// update particles
+		{
 			ParticlesUB			particle;
 			particle.timeDelta	= _GetTimeStep();
 			particle.steps		= Clamp( uint(FrameTime().count() / particle.timeDelta + 0.5f), 1u, _numSteps );
 			particle.globalTime	= std::chrono::duration_cast<SecondsF>(CurrentTime() - _startTime).count();
-
-			cmdbuf->AddTask( UpdateBuffer{}.SetBuffer( _cameraUB ).AddData( &camera, 1 ));
 			cmdbuf->AddTask( UpdateBuffer{}.SetBuffer( _particlesUB ).AddData( &particle, 1 ));
 		}
 
@@ -154,7 +133,7 @@ namespace FG
 		{
 			DispatchCompute		comp;
 			comp.SetPipeline( _updateParticlesPpln );
-			comp.AddResources( DescriptorSetID{"0"}, &_updateParticlesRes );
+			comp.AddResources( DescriptorSetID{"0"}, _updateParticlesRes );
 			comp.SetLocalSize( uint2{_localSize, 1} );
 			comp.Dispatch( uint2{(_numParticles + _localSize - 1) / _localSize, 1} );
 
@@ -164,80 +143,48 @@ namespace FG
 		// draw
 		{
 			// resize
-			if ( not _colorBuffer1 or Any( _frameGraph->GetDescription(_colorBuffer1).dimension.xy() != surf_dim ))
+			if ( not _colorBuffer[0] or Any( _frameGraph->GetDescription(_colorBuffer[0]).dimension.xy() != surf_dim ))
 			{
-				_frameGraph->ReleaseResource( _colorBuffer1 );
-				_frameGraph->ReleaseResource( _colorBuffer2 );
+				_frameGraph->ReleaseResource( _colorBuffer[0] );
+				_frameGraph->ReleaseResource( _colorBuffer[1] );
 				_frameGraph->ReleaseResource( _depthBuffer );
 
-				_colorBuffer1 = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, uint3{surf_dim}, EPixelFormat::RGBA8_UNorm,
-																	EImageUsage::ColorAttachment | EImageUsage::Sampled | EImageUsage::Transfer | EImageUsage::Storage },
+				_colorBuffer[0] = _frameGraph->CreateImage( ImageDesc{}.SetDimension( surf_dim ).SetFormat( EPixelFormat::RGBA8_UNorm )
+																.SetUsage( EImageUsage::ColorAttachment | EImageUsage::Sampled | EImageUsage::Transfer | EImageUsage::Storage ),
 															Default, "ColorBuffer1" );
-				_colorBuffer2 = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, uint3{surf_dim}, EPixelFormat::RGBA8_UNorm,
-																	EImageUsage::ColorAttachment | EImageUsage::Sampled | EImageUsage::Transfer | EImageUsage::Storage },
+				_colorBuffer[1] = _frameGraph->CreateImage( ImageDesc{}.SetDimension( surf_dim ).SetFormat( EPixelFormat::RGBA8_UNorm )
+																.SetUsage( EImageUsage::ColorAttachment | EImageUsage::Sampled | EImageUsage::Transfer | EImageUsage::Storage ),
 															Default, "ColorBuffer2" );
-				_depthBuffer = _frameGraph->CreateImage( ImageDesc{ EImage::Tex2D, uint3{surf_dim}, EPixelFormat::Depth24_Stencil8,
-																	EImageUsage::DepthStencilAttachment | EImageUsage::Sampled },
+				_depthBuffer = _frameGraph->CreateImage( ImageDesc{}.SetDimension( surf_dim ).SetFormat( EPixelFormat::Depth24_Stencil8 )
+																.SetUsage( EImageUsage::DepthStencilAttachment | EImageUsage::Sampled ),
 															Default, "DepthBuffer" );
-				CHECK( _colorBuffer1 and _colorBuffer2 and _depthBuffer );
+				CHECK( _colorBuffer[0] and _colorBuffer[1] and _depthBuffer );
 			}
 
 			if ( IsActiveVR() )
 			{
-				_DrawParticles( cmdbuf, _colorBuffer1 );
-				_DrawParticles( cmdbuf, _colorBuffer2 );
+				_DrawParticles( cmdbuf, 0 );
+				_DrawParticles( cmdbuf, 1 );
 
 				CHECK_ERR( _frameGraph->Execute( cmdbuf ));
 				CHECK_ERR( _frameGraph->Flush() );
 
-				const auto&			queue		= GetVulkan().GetVkQueues()[0];
-				const auto&			vk_desc_l	= std::get<VulkanImageDesc>( _frameGraph->GetApiSpecificDescription( _colorBuffer1 ));
-				const auto&			vk_desc_r	= std::get<VulkanImageDesc>( _frameGraph->GetApiSpecificDescription( _colorBuffer2 ));
-				IVRDevice::VRImage	vr_img;
-
-				vr_img.currQueue		= queue.handle;
-				vr_img.queueFamilyIndex	= queue.familyIndex;
-				vr_img.dimension		= vk_desc_l.dimension.xy();
-				vr_img.bounds			= RectF{ 0.0f, 0.0f, 1.0f, 1.0f };
-				vr_img.format			= BitCast<VkFormat>(vk_desc_l.format);
-				vr_img.sampleCount		= vk_desc_l.samples;
-
-				vr_img.handle = BitCast<VkImage>(vk_desc_l.image);
-				GetVRDevice()->Submit( vr_img, IVRDevice::Eye::Left );
-					
-				vr_img.handle = BitCast<VkImage>(vk_desc_r.image);
-				GetVRDevice()->Submit( vr_img, IVRDevice::Eye::Right );
+				_VRPresent( GetVulkan().GetVkQueues()[0], _colorBuffer[0], _colorBuffer[1], true );
 			}
 			else
 			{
-				_DrawParticles( cmdbuf, _colorBuffer1 );
+				_DrawParticles( cmdbuf, 0 );
 
 				// copy to swapchain image
 				{
 					RawImageID	sw_image = cmdbuf->GetSwapchainImage( GetSwapchain() );
 
-					cmdbuf->AddTask( BlitImage{}.From( _colorBuffer1 ).To( sw_image ).SetFilter( EFilter::Linear )
+					cmdbuf->AddTask( BlitImage{}.From( _colorBuffer[0] ).To( sw_image ).SetFilter( EFilter::Linear )
 												.AddRegion( {}, int2(0), int2(surf_dim), {}, int2(0), int2(sw_dim) ));
+
+					_DrawUI( cmdbuf, sw_image );
 				}
-			
-				// draw ui
-				#ifdef FG_ENABLE_IMGUI
-				{
-					auto&	draw_data = *ImGui::GetDrawData();
 
-					if ( draw_data.TotalVtxCount > 0 )
-					{
-						RawImageID		sw_image = cmdbuf->GetSwapchainImage( GetSwapchain() );
-
-						LogicalPassID	pass_id = cmdbuf->CreateRenderPass( RenderPassDesc{ int2{float2{ draw_data.DisplaySize.x, draw_data.DisplaySize.y }} }
-														.AddViewport(float2{ draw_data.DisplaySize.x, draw_data.DisplaySize.y })
-														.AddTarget( RenderTargetID::Color_0, sw_image, EAttachmentLoadOp::Load, EAttachmentStoreOp::Store ));
-
-						_uiRenderer.Draw( cmdbuf, pass_id );
-					}
-				}
-				#endif
-				
 				CHECK_ERR( _frameGraph->Execute( cmdbuf ));
 				CHECK_ERR( _frameGraph->Flush() );
 			}
@@ -252,27 +199,29 @@ namespace FG
 	_DrawParticles
 =================================================
 */
-	void  ParticlesApp::_DrawParticles (const CommandBuffer &cmdbuf, RawImageID colorBuffer)
+	void  ParticlesApp::_DrawParticles (const CommandBuffer &cmdbuf, uint eye)
 	{
 		if ( _dotsParticlesPpln and _raysParticlesPpln )
 		{
-			const uint2		surf_dim = _frameGraph->GetDescription( colorBuffer ).dimension.xy();
+			const uint2		surf_dim = _frameGraph->GetDescription( _colorBuffer[eye] ).dimension.xy();
 
 			LogicalPassID	pass_id = cmdbuf->CreateRenderPass( RenderPassDesc{ surf_dim }
 										.AddViewport( surf_dim )
-										.AddTarget( RenderTargetID::Color_0, colorBuffer, RGBA32f{0.0f}, EAttachmentStoreOp::Store )
+										.AddTarget( RenderTargetID::Color_0, _colorBuffer[eye], RGBA32f{0.0f}, EAttachmentStoreOp::Store )
 										.AddTarget( RenderTargetID::Depth, _depthBuffer, DepthStencil{1.0f}, EAttachmentStoreOp::Store ));
-			CHECK_ERR( pass_id, void());
+			CHECK_ERRV( pass_id );
+			
+			_drawParticlesRes.BindBuffer( UniformID{"CameraUB"}, _cameraUB[eye] );
 
 			DrawVertices	draw;
-			draw.AddBuffer( Default, _particlesBuf );
+			draw.AddVertexBuffer( Default, _particlesBuf );
 			draw.SetVertexInput( VertexInputState{}.Bind( Default, SizeOf<ParticleVertex> )
 									.Add( VertexID{"in_Position"},	&ParticleVertex::position )
 									.Add( VertexID{"in_Color"},		&ParticleVertex::color )
 									.Add( VertexID{"in_Size"},		&ParticleVertex::size )
 									.Add( VertexID{"in_Velocity"},	&ParticleVertex::velocity ));
 			draw.SetTopology( EPrimitive::Point );
-			draw.AddResources( DescriptorSetID{"0"}, &_drawParticlesRes );
+			draw.AddResources( DescriptorSetID{"0"}, _drawParticlesRes );
 			draw.SetDepthTestEnabled( false );
 			draw.SetDepthWriteEnabled( false );
 			draw.Draw( _numParticles );
@@ -301,7 +250,7 @@ namespace FG
 		}
 		else
 		{
-			cmdbuf->AddTask( ClearColorImage{}.SetImage( colorBuffer ).Clear( RGBA32f{0.2f} ).AddRange( 0_mipmap, 1, 0_layer, 1 ));
+			cmdbuf->AddTask( ClearColorImage{}.SetImage( _colorBuffer[eye] ).Clear( RGBA32f{0.2f} ).AddRange( 0_mipmap, 1, 0_layer, 1 ));
 		}
 	}
 
@@ -312,7 +261,7 @@ namespace FG
 */
 	void  ParticlesApp::OnKey (StringView key, EKeyAction action)
 	{
-		BaseSceneApp::OnKey( key, action );
+		BaseSample::OnKey( key, action );
 
 		if ( action == EKeyAction::Down )
 		{
@@ -321,12 +270,6 @@ namespace FG
 			if ( key == "U" )	{ _debugPixel = GetMousePos() / vec2(GetSurfaceSize().x, GetSurfaceSize().y); }
 			if ( key == "P" )	_ResetPosition();
 		}
-		
-	#ifdef FG_ENABLE_IMGUI
-		if ( key == "left mb" )		_mouseJustPressed[0] = action;
-		if ( key == "right mb" )	_mouseJustPressed[1] = action;
-		if ( key == "middle mb" )	_mouseJustPressed[2] = action;
-	#endif
 	}
 	
 /*
@@ -359,7 +302,7 @@ namespace FG
 				
 				DispatchCompute		comp;
 				comp.SetPipeline( ppln );
-				comp.AddResources( DescriptorSetID{"0"}, &res );
+				comp.AddResources( DescriptorSetID{"0"}, res );
 				comp.SetLocalSize( uint2{_localSize, 1} );
 				comp.Dispatch( uint2{(_maxParticles + _localSize - 1) / _localSize, 1} );
 				cmdbuf->AddTask( comp );
@@ -404,8 +347,6 @@ namespace FG
 				_frameGraph->ReleaseResource( _dotsParticlesPpln );
 				_dotsParticlesPpln = std::move(ppln);
 				CHECK( _frameGraph->InitPipelineResources( _dotsParticlesPpln, DescriptorSetID{"0"}, OUT _drawParticlesRes ));
-				
-				_drawParticlesRes.BindBuffer( UniformID{"CameraUB"}, _cameraUB );
 			}
 		}
 
@@ -424,8 +365,6 @@ namespace FG
 				_frameGraph->ReleaseResource( _raysParticlesPpln );
 				_raysParticlesPpln = std::move(ppln);
 				CHECK( _frameGraph->InitPipelineResources( _raysParticlesPpln, DescriptorSetID{"0"}, OUT _drawParticlesRes ));
-				
-				_drawParticlesRes.BindBuffer( UniformID{"CameraUB"}, _cameraUB );
 			}
 		}
 	}
@@ -437,7 +376,7 @@ namespace FG
 */
 	void  ParticlesApp::_ResetPosition ()
 	{
-		GetFPSCamera().SetPosition({ 0.0f, 0.0f, 0.0f });
+		GetFPSCamera().SetPosition({ 0.0f, 0.0f, 10.0f });
 	}
 	
 /*
@@ -461,73 +400,57 @@ namespace FG
 	}
 
 
-#ifdef FG_ENABLE_IMGUI
 /*
 =================================================
-	_UpdateUI
+	OnUpdateUI
 =================================================
 */
-	bool  ParticlesApp::_UpdateUI ()
+	void  ParticlesApp::OnUpdateUI ()
 	{
-		ImGuiIO &	io = ImGui::GetIO();
-		CHECK_ERR( io.Fonts->IsBuilt() );
+	#ifdef FG_ENABLE_IMGUI
+		ImGui::Text( "Particle mode:" );
+		ImGui::RadioButton( " dots", INOUT Cast<int>(&_particleMode), int(EParticleDrawMode::Dots) );
+		ImGui::RadioButton( " rays", INOUT Cast<int>(&_particleMode), int(EParticleDrawMode::Rays) );
+		ImGui::Separator();
 
-		io.DisplaySize	= ImVec2{float(GetSurfaceSize().x), float(GetSurfaceSize().y)};
-		io.DeltaTime	= FrameTime().count();
-
-		CHECK_ERR( _UpdateInput() );
-
-		ImGui::NewFrame();
-		//ImGui::SetNextWindowSize( ImVec2{ 400, 300 });
+		ImGui::Text( "Blend mode:" );
+		ImGui::RadioButton( " none",     INOUT Cast<int>(&_blendMode), int(EBlendMode::None) );
+		ImGui::RadioButton( " additive", INOUT Cast<int>(&_blendMode), int(EBlendMode::Additive) );
+		ImGui::Separator();
 			
-		if ( ImGui::Begin( "Particle settings", &_settingsWndOpen ))
+		ImGui::Text( "Particle count:" );
+		ImGui::SliderInt( "##ParticleCount", INOUT Cast<int>(&_numParticles), 1, _maxParticles );
+		ImGui::Text( ("Time step: "s + ToString(_GetTimeStep())).c_str() );
+		ImGui::SliderFloat( "##TimeScale", INOUT &_timeScale, -1.0f, 1.0f );
+		ImGui::Text( "Max steps:" );
+		ImGui::SliderInt( "##MaxSteps", INOUT Cast<int>(&_numSteps), 1, _maxSteps );
+		ImGui::Separator();
+			
+		ImGui::Text( "Surface scale" );
+		ImGui::SliderInt( "##SurfaceScaleSlider", INOUT &_sufaceScaleIdx, -2, 1, _SurfaceScaleName( _sufaceScaleIdx ));
+		ImGui::Separator();
+			
+		ImGui::Text( "Sample:" );
+		ImGui::RadioButton( " 1", INOUT Cast<int>(&_newMode), 1 );
+		ImGui::RadioButton( " 2", INOUT Cast<int>(&_newMode), 3 );
+		ImGui::RadioButton( " 3", INOUT Cast<int>(&_newMode), 4 );
+		ImGui::RadioButton( " 4", INOUT Cast<int>(&_newMode), 5 );
+			
+		ImGui::Separator();
+
+		if ( ImGui::Button( "Restart (I)" ))
 		{
-			ImGui::Text( "Particle mode:" );
-			ImGui::RadioButton( " dots", Cast<int>(&_particleMode), int(EParticleDrawMode::Dots) );
-			ImGui::RadioButton( " rays", Cast<int>(&_particleMode), int(EParticleDrawMode::Rays) );
-			ImGui::Separator();
-
-			ImGui::Text( "Blend mode:" );
-			ImGui::RadioButton( " none",     Cast<int>(&_blendMode), int(EBlendMode::None) );
-			ImGui::RadioButton( " additive", Cast<int>(&_blendMode), int(EBlendMode::Additive) );
-			ImGui::Separator();
-			
-			ImGui::Text( "Particle count:" );
-			ImGui::SliderInt( "##ParticleCount", Cast<int>(&_numParticles), 1, _maxParticles );
-			ImGui::Text( ("Time step: "s + ToString(_GetTimeStep())).c_str() );
-			ImGui::SliderFloat( "##TimeScale", &_timeScale, -1.0f, 1.0f );
-			ImGui::Text( "Max steps:" );
-			ImGui::SliderInt( "##MaxSteps", Cast<int>(&_numSteps), 1, _maxSteps );
-			ImGui::Separator();
-
-			ImGui::Checkbox( "Surface half size", &_halfSurfaceSize );
-			ImGui::Separator();
-			
-			ImGui::Text( "Sample:" );
-			ImGui::RadioButton( " 1", Cast<int>(&_newMode), 1 );
-			ImGui::RadioButton( " 2", Cast<int>(&_newMode), 3 );
-			ImGui::RadioButton( " 3", Cast<int>(&_newMode), 4 );
-			ImGui::RadioButton( " 4", Cast<int>(&_newMode), 5 );
-			
-			ImGui::Separator();
-
-			if ( ImGui::Button( "Restart (I)" ))
-			{
-				_reloadShaders	= true;
-				_initialized	= false;
-			}
-
-			if ( ImGui::Button( "Reset position (P)" ))
-				_ResetPosition();
-				
-			if ( ImGui::Button( "Reset orientation" ))
-				_ResetOrientation();
-
-			ImGui::Separator();
+			_reloadShaders	= true;
+			_initialized	= false;
 		}
 
-		ImGui::End();
-		ImGui::Render();
+		if ( ImGui::Button( "Reset position (P)" ))
+			_ResetPosition();
+				
+		if ( ImGui::Button( "Reset orientation" ))
+			_ResetOrientation();
+
+		ImGui::Separator();
 
 		if ( _newMode != _curMode )
 		{
@@ -536,37 +459,8 @@ namespace FG
 			_initialized	= false;
 		}
 
-		return true;
+	#endif
 	}
-
-/*
-=================================================
-	_UpdateInput
-=================================================
-*/
-	bool ParticlesApp::_UpdateInput ()
-	{
-		ImGuiIO &	io = ImGui::GetIO();
-
-		for (size_t i = 0; i < _mouseJustPressed.size(); ++i)
-		{
-			io.MouseDown[i] = (_mouseJustPressed[i] != EKeyAction::Up);
-		}
-
-		io.MousePos = { GetMousePos().x, GetMousePos().y };
-
-		memset( io.NavInputs, 0, sizeof(io.NavInputs) );
-		return true;
-	}
-
-#else
-	
-	bool  ParticlesApp::_UpdateUI ()
-	{
-		return false;
-	}
-
-#endif
 
 }	// FG
 

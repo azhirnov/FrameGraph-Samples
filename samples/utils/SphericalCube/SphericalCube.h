@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "scene/Math/Spherical.h"
 #include "SphericalCubeMath.h"
 
 namespace FG
@@ -54,7 +53,7 @@ namespace FG
 			float		_padding1;
 			float3		texcoord;
 			float		_padding2;
-			//float3	tangent;	// TODO: use it for distortion correction and for tessellation
+			//float3	tangent;	// TODO: use it for distortion correction and for tessellation (instead of linear interpolation)
 
 			Vertex () {}
 			Vertex (const float3 &pos, const float3 &texc) : position{pos}, texcoord{texc} {}
@@ -81,6 +80,7 @@ namespace FG
 		ND_ DrawIndexed  Draw (uint lod) const;
 
 			bool GetVertexBuffer (uint lod, uint face, OUT RawBufferID &id, OUT BytesU &offset, OUT BytesU &size, OUT uint2 &vertCount) const;
+			bool GetIndexBuffer (uint lod, uint face, OUT RawBufferID &id, OUT BytesU &offset, OUT BytesU &size, OUT uint &indexCount) const;
 
 		ND_ bool RayCast (const float3 &center, float radius, const float3 &begin, const float3 &end, OUT float3 &outIntersection) const;
 

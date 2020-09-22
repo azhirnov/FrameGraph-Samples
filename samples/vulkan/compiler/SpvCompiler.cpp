@@ -36,7 +36,7 @@ bool SpvCompiler::Compile (OUT VkShaderModule &		shaderModule,
 						   EShTargetLanguageVersion	spvVersion,
 						   bool						autoMapLocations) const
 {
-	if ( not Compile( OUT _tempBuf, source, entry, shaderType, spvVersion, autoMapLocations ) )
+	if ( not Compile( OUT _tempBuf, source, entry, shaderType, spvVersion, autoMapLocations ))
 		return false;
 
 	VkShaderModuleCreateInfo	info = {};
@@ -80,7 +80,7 @@ bool SpvCompiler::Compile (OUT Array<uint>&			spirvData,
 	shader.setAutoMapLocations( autoMapLocations );
 	shader.setAutoMapBindings( autoMapLocations );
 
-	if ( not shader.parse( &builtin_res, 460, ECoreProfile, false, true, messages ) )
+	if ( not shader.parse( &builtin_res, 460, ECoreProfile, false, true, messages ))
 	{
 		FG_LOGI( shader.getInfoLog() );
 		return false;
@@ -88,7 +88,7 @@ bool SpvCompiler::Compile (OUT Array<uint>&			spirvData,
 		
 	program.addShader( &shader );
 
-	if ( not program.link( messages ) )
+	if ( not program.link( messages ))
 	{
 		FG_LOGI( program.getInfoLog() );
 		return false;

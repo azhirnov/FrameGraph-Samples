@@ -3,11 +3,13 @@
 	this sample based on 'PerGeometryHitShader' from https://github.com/NVIDIAGameWorks/DxrTutorials/tree/master/Tutorials/12-PerGeometryHitShader
 */
 
-#include "framework/Vulkan/VulkanDeviceExt.h"
+#include "framework/Vulkan/VulkanDevice.h"
 #include "framework/Vulkan/VulkanSwapchain.h"
 #include "framework/Window/WindowGLFW.h"
 #include "framework/Window/WindowSDL2.h"
 #include "compiler/SpvCompiler.h"
+
+#ifdef VK_NV_ray_tracing
 
 namespace {
 
@@ -37,8 +39,8 @@ private:
 
 	struct ResourceInit
 	{
-		using BindMemCallbacks_t	= Array< std::function<bool (void *)> >;
-		using DrawCallbacks_t		= Array< std::function<void (VkCommandBuffer)> >;
+		using BindMemCallbacks_t	= Array< Function<bool (void *)> >;
+		using DrawCallbacks_t		= Array< Function<void (VkCommandBuffer)> >;
 
 		MemInfo					host;
 		MemInfo					dev;
@@ -61,7 +63,7 @@ private:
 
 
 private:
-	VulkanDeviceExt				vulkan;
+	VulkanDeviceInitializer		vulkan;
 	VulkanSwapchainPtr			swapchain;
 	WindowPtr					window;
 	SpvCompiler					spvCompiler;
@@ -184,17 +186,11 @@ bool RayTracingApp2::Initialize ()
 		CHECK_ERR( window->Create( { 800, 600 }, title ));
 		window->AddListener( this );
 
-		CHECK_ERR( vulkan.Create( window->GetVulkanSurface(),
-								  title, "Engine",
-								  VK_API_VERSION_1_1,
-								  " RTX ",	// only RTX device is supported
-								  {{ VK_QUEUE_PRESENT_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 0.0f }},
-								  VulkanDevice::GetRecomendedInstanceLayers(),
-								  VulkanDevice::GetRecomendedInstanceExtensions(),
-								  { VK_NV_RAY_TRACING_EXTENSION_NAME }
-			));
+		CHECK_ERR( vulkan.CreateInstance( window->GetVulkanSurface(), title, "Engine", vulkan.GetRecomendedInstanceLayers(), {}, {1,0} ));
+		CHECK_ERR( vulkan.ChooseHighPerformanceDevice() );
+		CHECK_ERR( vulkan.CreateLogicalDevice( Default, { VK_NV_RAY_TRACING_EXTENSION_NAME }));
 		
-		vulkan.CreateDebugUtilsCallback( DebugUtilsMessageSeverity_All );
+		vulkan.CreateDebugCallback( DefaultDebugMessageSeverity );
 
 		CHECK_ERR( IsRayTracingSupported() );
 	}
@@ -205,7 +201,7 @@ bool RayTracingApp2::Initialize ()
 		VkFormat		color_fmt	= VK_FORMAT_UNDEFINED;
 		VkColorSpaceKHR	color_space	= VK_COLOR_SPACE_MAX_ENUM_KHR;
 
-		swapchain.reset( new VulkanSwapchain{ vulkan } );
+		swapchain.reset( new VulkanSwapchain{ vulkan });
 
 		CHECK_ERR( swapchain->ChooseColorFormat( INOUT color_fmt, INOUT color_space ));
 
@@ -288,8 +284,9 @@ void RayTracingApp2::Destroy ()
 
 	swapchain->Destroy();
 	swapchain.reset();
-
-	vulkan.Destroy();
+	
+	vulkan.DestroyLogicalDevice();
+	vulkan.DestroyInstance();
 
 	window->Destroy();
 	window.reset();
@@ -365,7 +362,7 @@ bool RayTracingApp2::Run ()
 				vkCmdBindPipeline( cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, rtPipeline );
 				vkCmdBindDescriptorSets( cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pplnLayout, 0, 1, &descriptorSet[frameId], 0, null );
 
-				VkDeviceSize	stride = vulkan.GetDeviceRayTracingProperties().shaderGroupBaseAlignment;
+				VkDeviceSize	stride = vulkan.GetProperties().rayTracingNVProperties.shaderGroupBaseAlignment;
 
 				vkCmdTraceRaysNV( cmd, 
 								   shaderBindingTable, RAYGEN_SHADER * stride,
@@ -481,7 +478,7 @@ bool RayTracingApp2::CreateSyncObjects ()
 	sem_info.flags		= 0;
 
 	for (auto& sem : semaphores) {
-		VK_CALL( vkCreateSemaphore( dev, &sem_info, null, OUT &sem ) );
+		VK_CALL( vkCreateSemaphore( dev, &sem_info, null, OUT &sem ));
 	}
 
 	return true;
@@ -914,8 +911,8 @@ bool RayTracingApp2::CreateTopLevelAS (ResourceInit &res)
 */
 bool RayTracingApp2::CreateBindingTable (ResourceInit &res)
 {
-	VkDeviceSize	stride		= vulkan.GetDeviceRayTracingProperties().shaderGroupHandleSize;
-	VkDeviceSize	alignment	= Max( stride, vulkan.GetDeviceRayTracingProperties().shaderGroupBaseAlignment );
+	VkDeviceSize	stride		= vulkan.GetProperties().rayTracingNVProperties.shaderGroupHandleSize;
+	VkDeviceSize	alignment	= Max( stride, vulkan.GetProperties().rayTracingNVProperties.shaderGroupBaseAlignment );
 
 	VkBufferCreateInfo	info = {};
 	info.sType			= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1308,3 +1305,10 @@ extern void RayTracing_Sample2 ()
 		app.Destroy();
 	}
 }
+
+#else
+
+extern void RayTracing_Sample2 ()
+{}
+
+#endif	// VK_NV_ray_tracing

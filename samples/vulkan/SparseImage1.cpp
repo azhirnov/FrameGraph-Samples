@@ -1,12 +1,14 @@
 // Copyright (c) 2018-2020,  Zhirnov Andrey. For more information see 'LICENSE'
 
-#include "framework/Vulkan/VulkanDeviceExt.h"
+#include "framework/Vulkan/VulkanDevice.h"
 #include "framework/Vulkan/VulkanSwapchain.h"
 #include "framework/Window/WindowGLFW.h"
 #include "framework/Window/WindowSDL2.h"
 #include "compiler/SpvCompiler.h"
 #include "stl/Algorithms/StringUtils.h"
 #include "stl/Math/Color.h"
+
+#ifdef VK_VERSION_1_1
 
 namespace {
 
@@ -15,7 +17,7 @@ class SparseImageApp final : public IWindowEventListener, public VulkanDeviceFn
 	using TimePoint_t	= std::chrono::time_point< std::chrono::high_resolution_clock >;
 
 private:
-	VulkanDeviceExt			vulkan;
+	VulkanDeviceInitializer	vulkan;
 	VulkanSwapchainPtr		swapchain;
 	WindowPtr				window;
 	SpvCompiler				spvCompiler;
@@ -80,10 +82,10 @@ public:
 
 	ND_ bool IsSparseImageSupported () const
 	{
-		return	vulkan.GetDeviceFeatures().sparseBinding			and
-				vulkan.GetDeviceFeatures().sparseResidencyAliased	and
-				vulkan.GetDeviceFeatures().sparseResidencyBuffer	and
-				vulkan.GetDeviceFeatures().sparseResidencyImage2D;
+		return	vulkan.GetProperties().features.sparseBinding			and
+				vulkan.GetProperties().features.sparseResidencyAliased	and
+				vulkan.GetProperties().features.sparseResidencyBuffer	and
+				vulkan.GetProperties().features.sparseResidencyImage2D;
 	}
 };
 
@@ -142,17 +144,11 @@ bool SparseImageApp::Initialize ()
 		CHECK_ERR( window->Create( { 800, 600 }, title ));
 		window->AddListener( this );
 
-		CHECK_ERR( vulkan.Create( window->GetVulkanSurface(),
-								  "sample", "Engine",
-								  VK_API_VERSION_1_1,
-								  "",
-								  {{ VK_QUEUE_PRESENT_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_SPARSE_BINDING_BIT, 0.0f }},
-								  VulkanDevice::GetRecomendedInstanceLayers(),
-								  VulkanDevice::GetRecomendedInstanceExtensions(),
-								  {}
-			));
+		CHECK_ERR( vulkan.CreateInstance( window->GetVulkanSurface(), title, "Engine", vulkan.GetRecomendedInstanceLayers(), {}, {1,1} ));
+		CHECK_ERR( vulkan.ChooseHighPerformanceDevice() );
+		CHECK_ERR( vulkan.CreateLogicalDevice( {{VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_SPARSE_BINDING_BIT}}, Default ));
 		
-		vulkan.CreateDebugUtilsCallback( DebugUtilsMessageSeverity_All );
+		vulkan.CreateDebugCallback( DefaultDebugMessageSeverity );
 
 		CHECK_ERR( IsSparseImageSupported() );
 	}
@@ -163,7 +159,7 @@ bool SparseImageApp::Initialize ()
 		VkFormat		color_fmt	= VK_FORMAT_UNDEFINED;
 		VkColorSpaceKHR	color_space	= VK_COLOR_SPACE_MAX_ENUM_KHR;
 
-		swapchain.reset( new VulkanSwapchain{ vulkan } );
+		swapchain.reset( new VulkanSwapchain{ vulkan });
 
 		CHECK_ERR( swapchain->ChooseColorFormat( INOUT color_fmt, INOUT color_space ));
 
@@ -234,8 +230,9 @@ void SparseImageApp::Destroy ()
 	DestroyFramebuffers();
 	swapchain->Destroy();
 	swapchain.reset();
-
-	vulkan.Destroy();
+	
+	vulkan.DestroyLogicalDevice();
+	vulkan.DestroyInstance();
 
 	window->Destroy();
 	window.reset();
@@ -440,7 +437,7 @@ bool SparseImageApp::CreateSyncObjects ()
 	sem_info.flags		= 0;
 
 	for (auto& sem : semaphores) {
-		VK_CALL( vkCreateSemaphore( dev, &sem_info, null, OUT &sem ) );
+		VK_CALL( vkCreateSemaphore( dev, &sem_info, null, OUT &sem ));
 	}
 
 	return true;
@@ -644,7 +641,7 @@ bool SparseImageApp::CreateResources ()
 		info.tiling			= VK_IMAGE_TILING_OPTIMAL;
 		info.usage			= VK_IMAGE_USAGE_SAMPLED_BIT;
 		info.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;
-		info.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
+		info.initialLayout	= VK_IMAGE_LAYOUT_PREINITIALIZED;
 
 		VK_CHECK( vkCreateImage( vulkan.GetVkDevice(), &info, null, OUT &sparseImage ));
 		
@@ -806,7 +803,7 @@ bool SparseImageApp::CreateResources ()
 		VkImageMemoryBarrier	barrier = {};
 		barrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		barrier.image				= sparseImage;
-		barrier.oldLayout			= VK_IMAGE_LAYOUT_UNDEFINED;
+		barrier.oldLayout			= VK_IMAGE_LAYOUT_PREINITIALIZED;
 		barrier.newLayout			= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		barrier.srcAccessMask		= 0;
 		barrier.dstAccessMask		= VK_ACCESS_SHADER_READ_BIT;
@@ -1047,3 +1044,10 @@ extern void SparseImage_Sample1 ()
 		app.Destroy();
 	}
 }
+
+#else
+
+extern void SparseImage_Sample1 ()
+{}
+
+#endif	// VK_VERSION_1_1

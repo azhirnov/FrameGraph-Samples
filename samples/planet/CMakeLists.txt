@@ -1,4 +1,4 @@
-if (${FG_ENABLE_GLM} AND ${FG_ENABLE_DEVIL})
+if (TARGET "Samples.Utils")
 	file( GLOB_RECURSE SOURCES "*.h" "*.cpp" "*.glsl" )
 	add_executable( "Samples.Planet" ${SOURCES} )
 	source_group( TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES} )

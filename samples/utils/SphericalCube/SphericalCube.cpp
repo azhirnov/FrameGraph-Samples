@@ -202,9 +202,9 @@ namespace {
 
 		DrawIndexed		task;
 		task.SetVertexInput( GetAttribs() );
-		task.AddBuffer( Default, _vertexBuffer, vb_offset );
+		task.AddVertexBuffer( Default, _vertexBuffer, vb_offset );
 		task.SetIndexBuffer( _indexBuffer, ib_offset, EIndex::UInt );
-		task.Draw( CalcIndexCount( lod, _quads ) );
+		task.Draw( CalcIndexCount( lod, _quads ));
 		task.SetTopology( EPrimitive::TriangleList );
 		task.SetFrontFaceCCW( false );
 
@@ -289,6 +289,32 @@ namespace {
 		size	= face_size / 6;
 		offset += (face_size * face) / 6;
 		id		= _vertexBuffer;
+
+		return true;
+	}
+	
+/*
+=================================================
+	GetIndexBuffer
+=================================================
+*/
+	bool  SphericalCube::GetIndexBuffer (uint lod, uint face, OUT RawBufferID &id, OUT BytesU &offset, OUT BytesU &size, OUT uint &indexCount) const
+	{
+		CHECK_ERR( lod >= _minLod and lod <= _maxLod );
+		CHECK_ERR( face < 6 );
+		
+		offset = 0_b;
+		for (uint i = _minLod; i < lod; ++i) {
+			offset += SizeOf<uint> * CalcIndexCount( i, _quads );
+		}
+
+		indexCount = CalcIndexCount( lod, _quads );
+
+		BytesU	face_size = SizeOf<uint> * indexCount;
+
+		size	= face_size / 6;
+		offset += (face_size * face) / 6;
+		id		= _indexBuffer;
 
 		return true;
 	}
